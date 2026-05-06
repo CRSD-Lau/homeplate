@@ -48,6 +48,9 @@ export function applyThemePreference(theme: ThemePreference) {
 
   document.documentElement.classList.toggle("dark", dark);
   document.documentElement.dataset.theme = theme;
+
+  document.body.classList.toggle("dark", dark);
+  document.body.dataset.theme = theme;
 }
 
 export function toggleThemePreference() {
