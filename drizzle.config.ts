@@ -10,7 +10,7 @@ export default defineConfig({
   out: "./src/db/migrations",
   dbCredentials: {
     url:
-      process.env.DATABASE_URL ??
+      process.env.DATABASE_URL ||
       "postgres://homeplate:homeplate_dev_password@localhost:5432/homeplate",
   },
   strict: true,

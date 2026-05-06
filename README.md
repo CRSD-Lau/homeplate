@@ -76,6 +76,8 @@ ADMIN_EMAIL=
 OPEN_FOOD_FACTS_USER_AGENT="HomePlate/0.1 private household app"
 ```
 
+Every value except `OPEN_FOOD_FACTS_USER_AGENT` must be filled in before seeding. If `SEED_NEIL_EMAIL=`, `SEED_NEIL_PASSWORD=`, `SEED_ALLISON_EMAIL=`, or `SEED_ALLISON_PASSWORD=` is still blank, `pnpm db:seed` will stop on purpose.
+
 Generate a local `AUTH_SECRET` from the repo folder. Node is the most reliable option on Windows:
 
 ```powershell
@@ -89,6 +91,8 @@ Start PostgreSQL:
 ```powershell
 docker compose up -d
 ```
+
+If Docker says it cannot connect to `dockerDesktopLinuxEngine`, open Docker Desktop from the Windows Start menu and wait until it says the engine is running, then rerun the command.
 
 Run migrations and seed Neil/Allison plus sample foods:
 
