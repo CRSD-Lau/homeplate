@@ -28,6 +28,7 @@ export function getServerThemeSnapshot(): ThemePreference {
 
 export function setThemePreference(theme: ThemePreference) {
   localStorage.setItem(themeStorageKey, theme);
+  applyThemePreference(theme);
   window.dispatchEvent(new Event(themeChangeEvent));
 }
 
