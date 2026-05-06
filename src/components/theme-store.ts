@@ -51,18 +51,11 @@ export function applyThemePreference(theme: ThemePreference) {
 }
 
 export function toggleThemePreference() {
-  const nextTheme = isDarkTheme(getThemeSnapshot()) ? "light" : "dark";
+  const currentlyDark = document.documentElement.classList.contains("dark");
+  const nextTheme = currentlyDark ? "light" : "dark";
   setThemePreference(nextTheme);
 
   return nextTheme;
-}
-
-function isDarkTheme(theme: ThemePreference) {
-  return (
-    theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches)
-  );
 }
 
 function isTheme(value: string | null): value is ThemePreference {
