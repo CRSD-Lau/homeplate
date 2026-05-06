@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ThemeManager } from "@/components/theme-manager";
+import { getThemePreference } from "@/lib/theme";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -46,19 +46,25 @@ export const viewport: Viewport = {
   themeColor: "#256f5b",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const theme = await getThemePreference();
+  const darkClass = theme === "dark" ? "dark" : "";
+
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full`}
+      data-theme={theme}
+      className={`${geistSans.variable} ${geistMono.variable} h-full ${darkClass}`}
       suppressHydrationWarning
     >
-      <body className="flex min-h-full flex-col antialiased">
-        <ThemeManager />
+      <body
+        data-theme={theme}
+        className={`flex min-h-full flex-col antialiased ${darkClass}`}
+      >
         {children}
       </body>
     </html>
