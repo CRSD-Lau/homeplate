@@ -6,7 +6,7 @@ This is not a public SaaS, not a commercial food database, not a subscription pr
 
 ## Current Phase
 
-Phase 1 MVP foundation:
+Phase 1 MVP foundation is complete and released as `v0.1.0`.
 
 - Next.js App Router, TypeScript, Tailwind
 - PostgreSQL with Drizzle ORM
@@ -24,6 +24,8 @@ Phase 1 MVP foundation:
 - Core unit/nutrition/BMI tests
 
 Not implemented yet: CNF full import, Open Food Facts, barcode scanning, OCR, export files, native apps, or admin cleanup workflows.
+
+Next planned release: `v0.1.1` UI and design makeover only. New non-Phase-1 features are intentionally deferred until the app feels right on phone screens.
 
 ## Required Tools
 
