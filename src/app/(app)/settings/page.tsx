@@ -1,9 +1,10 @@
 import { FormMessage } from "@/components/form-message";
 import { PageHeader, Panel } from "@/components/page-header";
 import { SettingsForm } from "@/components/settings-form";
-import { getProfileAndSettings } from "@/lib/app-data";
+import { getSettingsPageData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
-import { formatHeight, formatWater } from "@/lib/units";
+import { toDateInputValue } from "@/lib/dates";
+import { formatHeight, formatWater, formatWeight } from "@/lib/units";
 
 export default async function SettingsPage({
   searchParams,
@@ -11,7 +12,8 @@ export default async function SettingsPage({
   searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const user = await requireUser();
-  const { profile, settings } = await getProfileAndSettings(user.id);
+  const { profile, settings, startingWeight, latestWeight } =
+    await getSettingsPageData(user.id);
   const { error, saved } = await searchParams;
 
   return (
@@ -36,6 +38,15 @@ export default async function SettingsPage({
             waterUnit={settings.waterUnit}
             bloodGlucoseUnit={settings.bloodGlucoseUnit}
             dailyWaterGoalMl={settings.dailyWaterGoalMl}
+            today={toDateInputValue()}
+            startingWeightText={
+              startingWeight
+                ? `${formatWeight(
+                    startingWeight.weightKg,
+                    settings.weightUnit,
+                  )} on ${startingWeight.logDate}`
+                : null
+            }
           />
         </Panel>
 
@@ -60,6 +71,22 @@ export default async function SettingsPage({
               value={
                 profile?.heightCm
                   ? formatHeight(profile.heightCm, settings.heightUnit)
+                  : "-"
+              }
+            />
+            <Preference
+              label="Starting weight"
+              value={
+                startingWeight
+                  ? formatWeight(startingWeight.weightKg, settings.weightUnit)
+                  : "-"
+              }
+            />
+            <Preference
+              label="Latest weight"
+              value={
+                latestWeight
+                  ? formatWeight(latestWeight.weightKg, settings.weightUnit)
                   : "-"
               }
             />

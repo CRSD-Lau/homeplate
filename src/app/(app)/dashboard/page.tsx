@@ -1,4 +1,15 @@
-import { Droplets, Flame, HeartPulse, Salad, Timer, Weight } from "lucide-react";
+import Link from "next/link";
+import {
+  Apple,
+  Droplets,
+  Dumbbell,
+  Flame,
+  HeartPulse,
+  Plus,
+  Salad,
+  Timer,
+  Weight,
+} from "lucide-react";
 
 import { PageHeader, Panel, StatCard } from "@/components/page-header";
 import { TrendCharts } from "@/components/trend-charts";
@@ -54,6 +65,17 @@ export default async function DashboardPage() {
           detail={`${data.exerciseCalories} calories logged`}
         />
       </div>
+
+      <Panel title="Quick Log" className="mt-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <QuickAction href="/log" icon={Salad} label="Food" />
+          <QuickAction href="/water" icon={Droplets} label="Water" />
+          <QuickAction href="/weight" icon={Weight} label="Weight" />
+          <QuickAction href="/exercise" icon={Dumbbell} label="Exercise" />
+          <QuickAction href="/health" icon={HeartPulse} label="Health" />
+          <QuickAction href="/foods" icon={Apple} label="Foods" />
+        </div>
+      </Panel>
 
       <section className="mt-5 grid gap-4 lg:grid-cols-3">
         <Panel title="Nutrition">
@@ -131,6 +153,26 @@ export default async function DashboardPage() {
   );
 }
 
+function QuickAction({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string;
+  icon: typeof Plus;
+  label: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-center text-sm font-semibold text-slate-800 transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40"
+    >
+      <Icon aria-hidden="true" size={20} />
+      <span>{label}</span>
+    </Link>
+  );
+}
+
 function Metric({
   icon: Icon,
   label,
@@ -146,11 +188,11 @@ function Metric({
 }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800">
-      <div className="flex items-center gap-2 text-sm text-slate-600">
+      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
         <Icon aria-hidden="true" size={16} />
         <span>{label}</span>
       </div>
-      <span className="font-medium text-slate-950">
+      <span className="font-medium text-slate-950 dark:text-slate-50">
         {text ?? `${formatNumber(value ?? 0, suffix === "%" ? 0 : 1)}${suffix}`}
       </span>
     </div>

@@ -29,6 +29,7 @@ import {
   validateWaterEntry,
   validateWeightEntry,
 } from "@/lib/validation/measurements";
+import { toDateInputValue } from "@/lib/dates";
 
 const mealTypeSchema = z.enum(["breakfast", "lunch", "dinner", "snack"]);
 const weightUnitSchema = z.enum(["lb", "kg"]);
@@ -130,12 +131,35 @@ export async function updateSettingsAction(formData: FormData) {
           updatedAt: new Date(),
         },
       });
+
+    const startingWeightValue = optionalNumber(formData, "startingWeightValue");
+    if (startingWeightValue !== null) {
+      const startingWeightUnit = weightUnitSchema.parse(
+        requiredString(formData, "startingWeightUnit"),
+      );
+      const startingWeight = validateWeightEntry(
+        startingWeightValue,
+        startingWeightUnit,
+      );
+
+      await getDb().insert(weightLogs).values({
+        userId: user.id,
+        logDate:
+          optionalDateString(formData, "startingWeightDate") ??
+          toDateInputValue(),
+        weightKg: startingWeight.weightKg,
+        entryWeightValue: startingWeight.entryWeightValue,
+        entryWeightUnit: startingWeight.entryWeightUnit,
+        notes: "Starting weight",
+      });
+    }
   } catch (error) {
     logActionError("Settings save failed", error);
     redirect(`/settings?error=${encodeURIComponent(actionErrorMessage(error))}`);
   }
 
   revalidatePath("/settings");
+  revalidatePath("/weight");
   revalidatePath("/dashboard");
   redirect("/settings?saved=1");
 }
@@ -473,6 +497,17 @@ function optionalString(formData: FormData, name: string) {
   const normalized = typeof value === "string" ? value.trim() : "";
 
   return normalized || null;
+}
+
+function optionalDateString(formData: FormData, name: string) {
+  const value = optionalString(formData, name);
+  if (value === null) return null;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new MeasurementValidationError(`${name} must be a valid date.`);
+  }
+
+  return value;
 }
 
 function requiredNumber(formData: FormData, name: string) {

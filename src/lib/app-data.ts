@@ -41,6 +41,31 @@ export async function getProfileAndSettings(userId: string) {
   };
 }
 
+export async function getSettingsPageData(userId: string) {
+  const { profile, settings } = await getProfileAndSettings(userId);
+  const [startingWeight, latestWeight] = await Promise.all([
+    getDb()
+      .select()
+      .from(weightLogs)
+      .where(eq(weightLogs.userId, userId))
+      .orderBy(asc(weightLogs.logDate), asc(weightLogs.loggedAt))
+      .limit(1),
+    getDb()
+      .select()
+      .from(weightLogs)
+      .where(eq(weightLogs.userId, userId))
+      .orderBy(desc(weightLogs.loggedAt))
+      .limit(1),
+  ]);
+
+  return {
+    profile,
+    settings,
+    startingWeight: startingWeight[0] ?? null,
+    latestWeight: latestWeight[0] ?? null,
+  };
+}
+
 export async function getFoodOptions() {
   return getDb()
     .select({
