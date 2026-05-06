@@ -43,6 +43,12 @@ Docker Desktop must be running before database commands can connect to local Pos
 
 ## Local Setup
 
+First move into the project folder. The commands below must be run from the repo root:
+
+```powershell
+Set-Location C:\Projects\HomePlate
+```
+
 Install dependencies:
 
 ```powershell
@@ -53,9 +59,10 @@ Create `.env.local`:
 
 ```powershell
 Copy-Item .env.example .env.local
+notepad .env.local
 ```
 
-Set these values in `.env.local`:
+Set these values in `.env.local`. Do not paste these lines directly into PowerShell; they belong in the file:
 
 ```env
 DATABASE_URL=postgres://homeplate:homeplate_dev_password@localhost:5432/homeplate
@@ -66,7 +73,7 @@ SEED_NEIL_PASSWORD=
 SEED_ALLISON_EMAIL=
 SEED_ALLISON_PASSWORD=
 ADMIN_EMAIL=
-OPEN_FOOD_FACTS_USER_AGENT=HomePlate/0.1 private household app
+OPEN_FOOD_FACTS_USER_AGENT="HomePlate/0.1 private household app"
 ```
 
 Generate a local `AUTH_SECRET` in PowerShell:
