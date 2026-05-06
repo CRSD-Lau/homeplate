@@ -76,12 +76,10 @@ ADMIN_EMAIL=
 OPEN_FOOD_FACTS_USER_AGENT="HomePlate/0.1 private household app"
 ```
 
-Generate a local `AUTH_SECRET` in PowerShell:
+Generate a local `AUTH_SECRET` from the repo folder. Node is the most reliable option on Windows:
 
 ```powershell
-$bytes = New-Object byte[] 32
-[Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-[Convert]::ToBase64String($bytes)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
 Use strong private passwords for `SEED_NEIL_PASSWORD` and `SEED_ALLISON_PASSWORD`. Do not commit `.env.local`.
