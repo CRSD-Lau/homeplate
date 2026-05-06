@@ -162,8 +162,10 @@ function ChartPanel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="mb-3 text-base font-semibold text-slate-950">{title}</h2>
+    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h2 className="mb-3 text-base font-semibold text-slate-950 dark:text-slate-50">
+        {title}
+      </h2>
       {children}
     </section>
   );

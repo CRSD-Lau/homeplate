@@ -15,15 +15,17 @@ export default async function LoginPage({
   const { error } = await searchParams;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f7faf8] px-4 py-10 text-slate-950">
-      <section className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <main className="flex min-h-screen items-center justify-center bg-[#f7faf8] px-4 py-10 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+      <section className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-8 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-700 text-white">
             <Utensils aria-hidden="true" size={24} />
           </div>
           <div>
             <h1 className="text-2xl font-semibold">HomePlate</h1>
-            <p className="text-sm text-slate-600">Private household login</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Private household login
+            </p>
           </div>
         </div>
 
@@ -41,7 +43,7 @@ export default async function LoginPage({
               type="email"
               autoComplete="email"
               required
-              className="mt-1 h-12 w-full rounded-lg border border-slate-300 px-3 text-base outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100"
+              className="field mt-1"
             />
           </label>
 
@@ -52,13 +54,13 @@ export default async function LoginPage({
               type="password"
               autoComplete="current-password"
               required
-              className="mt-1 h-12 w-full rounded-lg border border-slate-300 px-3 text-base outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100"
+              className="field mt-1"
             />
           </label>
 
           <button
             type="submit"
-            className="h-12 w-full rounded-lg bg-emerald-700 px-4 text-base font-semibold text-white transition hover:bg-emerald-800"
+            className="primary-button"
           >
             Sign in
           </button>

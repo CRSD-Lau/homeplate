@@ -15,7 +15,9 @@ export function getDb() {
     }
 
     client = postgres(databaseUrl, {
-      max: 5,
+      max: Number(process.env.DB_POOL_MAX ?? 1),
+      idle_timeout: 20,
+      max_lifetime: 60 * 30,
       prepare: false,
     });
     db = drizzle(client, { schema });

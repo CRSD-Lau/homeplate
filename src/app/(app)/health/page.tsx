@@ -6,15 +6,21 @@ import {
   logBloodGlucoseAction,
   logBloodPressureAction,
 } from "@/app/actions";
+import { FormMessage } from "@/components/form-message";
 import { PageHeader, Panel } from "@/components/page-header";
 import { getHealthPageData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
 import { toDateInputValue } from "@/lib/dates";
 import { formatGlucose } from "@/lib/units";
 
-export default async function HealthPage() {
+export default async function HealthPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; saved?: string }>;
+}) {
   const user = await requireUser();
   const { bloodPressure, bloodGlucose, settings } = await getHealthPageData(user.id);
+  const { error, saved } = await searchParams;
 
   return (
     <>
@@ -25,6 +31,11 @@ export default async function HealthPage() {
 
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Blood Pressure">
+          <FormMessage
+            error={saved === "glucose" ? undefined : error}
+            saved={saved === "pressure" ? saved : undefined}
+            savedText="Blood pressure saved."
+          />
           <form action={logBloodPressureAction} className="mb-5 space-y-3">
             <Field label="Date">
               <input
@@ -66,6 +77,11 @@ export default async function HealthPage() {
         </Panel>
 
         <Panel title="Blood Glucose">
+          <FormMessage
+            error={saved === "pressure" ? undefined : error}
+            saved={saved === "glucose" ? saved : undefined}
+            savedText="Blood glucose saved."
+          />
           <form action={logBloodGlucoseAction} className="mb-5 space-y-3">
             <Field label="Date">
               <input
@@ -76,21 +92,23 @@ export default async function HealthPage() {
                 className="field"
               />
             </Field>
-            <div className="grid grid-cols-[1fr_120px] gap-3">
-              <Field label="Glucose">
-                <input name="entryValue" type="number" step="0.1" required className="field" />
-              </Field>
-              <Field label="Unit">
-                <select
-                  name="entryUnit"
-                  defaultValue={settings.bloodGlucoseUnit}
-                  className="field"
-                >
-                  <option value="mmol_l">mmol/L</option>
-                  <option value="mg_dl">mg/dL</option>
-                </select>
-              </Field>
-            </div>
+            <Field label={`Glucose (${glucoseUnitLabel(settings.bloodGlucoseUnit)})`}>
+              <input
+                name="entryValue"
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                min={settings.bloodGlucoseUnit === "mmol_l" ? 1 : 18}
+                max={settings.bloodGlucoseUnit === "mmol_l" ? 35 : 630}
+                required
+                className="field"
+              />
+              <input
+                name="entryUnit"
+                type="hidden"
+                value={settings.bloodGlucoseUnit}
+              />
+            </Field>
             <Field label="Context">
               <select name="context" defaultValue="other" className="field">
                 <option value="fasting">Fasting</option>
@@ -144,7 +162,7 @@ function HistoryList({
       {rows.map((row) => (
         <div
           key={row.id}
-          className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+          className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"
         >
           <div>
             <p className="font-medium">{row.title}</p>
@@ -171,8 +189,14 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+        {label}
+      </span>
       <div className="mt-1">{children}</div>
     </label>
   );
+}
+
+function glucoseUnitLabel(unit: "mmol_l" | "mg_dl") {
+  return unit === "mmol_l" ? "mmol/L" : "mg/dL";
 }

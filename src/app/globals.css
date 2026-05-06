@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f7faf8;
   --foreground: #0f172a;
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #f8fafc;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -37,9 +45,20 @@ textarea {
     outline: none;
   }
 
+  .dark .field {
+    border-color: #475569;
+    background: #0f172a;
+    color: #f8fafc;
+  }
+
   .field:focus {
     border-color: #256f5b;
     box-shadow: 0 0 0 3px rgba(37, 111, 91, 0.12);
+  }
+
+  .dark .field:focus {
+    border-color: #34d399;
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16);
   }
 
   .primary-button {
@@ -67,6 +86,16 @@ textarea {
     color: #334155;
   }
 
+  .dark .secondary-button {
+    border-color: #475569;
+    background: #0f172a;
+    color: #e2e8f0;
+  }
+
+  .dark .secondary-button:hover {
+    background: #1e293b;
+  }
+
   .icon-button {
     display: inline-flex;
     height: 2.5rem;
@@ -79,8 +108,37 @@ textarea {
     color: #64748b;
   }
 
+  .dark .icon-button {
+    border-color: #334155;
+    background: #0f172a;
+    color: #cbd5e1;
+  }
+
   .icon-button:hover {
     background: #f8fafc;
     color: #dc2626;
+  }
+
+  .dark .icon-button:hover {
+    background: #1e293b;
+    color: #fca5a5;
+  }
+
+  .dark .text-slate-950 {
+    color: #f8fafc;
+  }
+
+  .dark .text-slate-700,
+  .dark .text-slate-600 {
+    color: #cbd5e1;
+  }
+
+  .dark .text-slate-500 {
+    color: #94a3b8;
+  }
+
+  .dark .border-slate-200,
+  .dark .border-slate-100 {
+    border-color: #334155;
   }
 }

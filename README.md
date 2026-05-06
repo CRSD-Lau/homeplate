@@ -66,6 +66,7 @@ Set these values in `.env.local`. Do not paste these lines directly into PowerSh
 
 ```env
 DATABASE_URL=postgres://homeplate:homeplate_dev_password@localhost:5433/homeplate
+DB_POOL_MAX=1
 AUTH_SECRET=
 APP_BASE_URL=http://localhost:3000
 SEED_NEIL_EMAIL=

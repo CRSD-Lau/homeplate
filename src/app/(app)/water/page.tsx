@@ -1,15 +1,22 @@
 import { Trash2 } from "lucide-react";
 
 import { deleteWaterLogAction, logWaterAction } from "@/app/actions";
+import { FormMessage } from "@/components/form-message";
 import { PageHeader, Panel } from "@/components/page-header";
 import { getWaterPageData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
 import { toDateInputValue } from "@/lib/dates";
 import { formatWater } from "@/lib/units";
 
-export default async function WaterPage() {
+export default async function WaterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; saved?: string }>;
+}) {
   const user = await requireUser();
   const { logs, settings } = await getWaterPageData(user.id);
+  const { error, saved } = await searchParams;
+  const quickAdds = getQuickAdds(settings.waterUnit);
 
   return (
     <>
@@ -20,14 +27,23 @@ export default async function WaterPage() {
 
       <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
         <Panel title="Add Water">
+          <FormMessage error={error} saved={saved} savedText="Water saved." />
           <div className="mb-4 grid grid-cols-3 gap-2">
-            {[250, 500, 750].map((amount) => (
-              <form action={logWaterAction} key={amount}>
+            {quickAdds.map((quickAdd) => (
+              <form action={logWaterAction} key={quickAdd.label}>
                 <input type="hidden" name="logDate" value={toDateInputValue()} />
-                <input type="hidden" name="entryAmount" value={amount} />
-                <input type="hidden" name="entryUnit" value="ml" />
+                <input
+                  type="hidden"
+                  name="entryAmount"
+                  value={quickAdd.amount}
+                />
+                <input
+                  type="hidden"
+                  name="entryUnit"
+                  value={settings.waterUnit}
+                />
                 <button className="secondary-button w-full" type="submit">
-                  {amount} ml
+                  {quickAdd.label}
                 </button>
               </form>
             ))}
@@ -43,24 +59,25 @@ export default async function WaterPage() {
                 className="field"
               />
             </Field>
-            <div className="grid grid-cols-[1fr_110px] gap-3">
-              <Field label="Amount">
-                <input
-                  name="entryAmount"
-                  type="number"
-                  step="0.1"
-                  required
-                  className="field"
-                />
-              </Field>
-              <Field label="Unit">
-                <select name="entryUnit" defaultValue={settings.waterUnit} className="field">
-                  <option value="ml">ml</option>
-                  <option value="oz">oz</option>
-                  <option value="cups">cups</option>
-                </select>
-              </Field>
-            </div>
+            <Field label={`Amount (${waterUnitLabel(settings.waterUnit)})`}>
+              <input
+                name="entryAmount"
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                min="0.1"
+                max={
+                  settings.waterUnit === "ml"
+                    ? 10000
+                    : settings.waterUnit === "oz"
+                      ? 350
+                      : 40
+                }
+                required
+                className="field"
+              />
+              <input name="entryUnit" type="hidden" value={settings.waterUnit} />
+            </Field>
             <Field label="Notes">
               <textarea name="notes" rows={2} className="field min-h-20" />
             </Field>
@@ -78,7 +95,7 @@ export default async function WaterPage() {
               {logs.map((log) => (
                 <div
                   key={log.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"
                 >
                   <div>
                     <p className="font-medium">
@@ -113,8 +130,38 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+        {label}
+      </span>
       <div className="mt-1">{children}</div>
     </label>
   );
+}
+
+function getQuickAdds(unit: "ml" | "oz" | "cups") {
+  if (unit === "oz") {
+    return [
+      { amount: 8, label: "8 oz" },
+      { amount: 16, label: "16 oz" },
+      { amount: 24, label: "24 oz" },
+    ];
+  }
+
+  if (unit === "cups") {
+    return [
+      { amount: 1, label: "1 cup" },
+      { amount: 2, label: "2 cups" },
+      { amount: 3, label: "3 cups" },
+    ];
+  }
+
+  return [
+    { amount: 250, label: "250 ml" },
+    { amount: 500, label: "500 ml" },
+    { amount: 750, label: "750 ml" },
+  ];
+}
+
+function waterUnitLabel(unit: "ml" | "oz" | "cups") {
+  return unit === "cups" ? "cups" : unit;
 }

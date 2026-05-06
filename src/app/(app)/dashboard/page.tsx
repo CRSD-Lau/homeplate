@@ -6,6 +6,7 @@ import { getDashboardData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
 import {
   formatGlucose,
+  formatHeight,
   formatNumber,
   formatWater,
   formatWeight,
@@ -78,6 +79,15 @@ export default async function DashboardPage() {
             text={
               data.latestWeight
                 ? formatWeight(data.latestWeight.weightKg, data.settings.weightUnit)
+              : "-"
+            }
+          />
+          <Metric
+            icon={Weight}
+            label="Height"
+            text={
+              data.profile?.heightCm
+                ? formatHeight(data.profile.heightCm, data.settings.heightUnit)
                 : "-"
             }
           />
@@ -135,7 +145,7 @@ function Metric({
   text?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0">
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800">
       <div className="flex items-center gap-2 text-sm text-slate-600">
         <Icon aria-hidden="true" size={16} />
         <span>{label}</span>

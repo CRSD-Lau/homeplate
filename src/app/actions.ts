@@ -21,13 +21,14 @@ import {
   weightLogs,
 } from "@/db/schema";
 import { destroySession, requireUser } from "@/lib/auth/session";
-import {
-  normalizeGlucoseToMmolL,
-  normalizeHeightToCm,
-  normalizeWaterToMl,
-  normalizeWeightToKg,
-} from "@/lib/units";
 import { scaleNutrients } from "@/lib/nutrition";
+import {
+  MeasurementValidationError,
+  validateGlucoseEntry,
+  validateHeightEntry,
+  validateWaterEntry,
+  validateWeightEntry,
+} from "@/lib/validation/measurements";
 
 const mealTypeSchema = z.enum(["breakfast", "lunch", "dinner", "snack"]);
 const weightUnitSchema = z.enum(["lb", "kg"]);
@@ -49,73 +50,94 @@ export async function logoutAction() {
 
 export async function updateSettingsAction(formData: FormData) {
   const user = await requireUser();
-  const displayName = requiredString(formData, "displayName");
-  const heightUnit = heightUnitSchema.parse(requiredString(formData, "heightUnit"));
-  const weightUnit = weightUnitSchema.parse(requiredString(formData, "weightUnit"));
-  const waterUnit = waterUnitSchema.parse(requiredString(formData, "waterUnit"));
-  const bloodGlucoseUnit = glucoseUnitSchema.parse(
-    requiredString(formData, "bloodGlucoseUnit"),
-  );
-  const dailyWaterGoalMl = Math.round(
-    normalizeWaterToMl(
+  let displayName = "";
+
+  try {
+    displayName = requiredString(formData, "displayName");
+    const heightUnit = heightUnitSchema.parse(
+      requiredString(formData, "heightUnit"),
+    );
+    const weightUnit = weightUnitSchema.parse(
+      requiredString(formData, "weightUnit"),
+    );
+    const waterUnit = waterUnitSchema.parse(requiredString(formData, "waterUnit"));
+    const bloodGlucoseUnit = glucoseUnitSchema.parse(
+      requiredString(formData, "bloodGlucoseUnit"),
+    );
+    const dailyWaterGoalUnit = waterUnitSchema.parse(
+      requiredString(formData, "dailyWaterGoalUnit"),
+    );
+    const dailyWaterGoal = validateWaterEntry(
       requiredNumber(formData, "dailyWaterGoal"),
-      waterUnitSchema.parse(requiredString(formData, "dailyWaterGoalUnit")),
-    ),
-  );
+      dailyWaterGoalUnit,
+    );
 
-  const heightEntryValue = optionalNumber(formData, "heightValue");
-  const heightEntryInches = optionalNumber(formData, "heightInches") ?? 0;
-  const heightCm =
-    heightEntryValue === null
-      ? null
-      : normalizeHeightToCm(heightEntryValue, heightUnit, heightEntryInches);
+    const heightEntryValue = optionalNumber(formData, "heightValue");
+    const heightEntryInches = optionalNumber(formData, "heightInches") ?? 0;
+    const height =
+      heightEntryValue === null
+        ? {
+            heightCm: null,
+            heightEntryValue: null,
+            heightEntryUnit: null,
+          }
+        : validateHeightEntry({
+            unit: heightUnit,
+            value: heightEntryValue,
+            inches: heightEntryInches,
+          });
 
-  await getDb()
-    .insert(userProfiles)
-    .values({
-      userId: user.id,
-      displayName,
-      heightCm,
-      heightEntryValue,
-      heightEntryUnit: heightEntryValue === null ? null : heightUnit,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: userProfiles.userId,
-      set: {
+    await getDb()
+      .insert(userProfiles)
+      .values({
+        userId: user.id,
         displayName,
-        heightCm,
-        heightEntryValue,
-        heightEntryUnit: heightEntryValue === null ? null : heightUnit,
+        heightCm: height.heightCm,
+        heightEntryValue: height.heightEntryValue,
+        heightEntryUnit: height.heightEntryUnit,
         updatedAt: new Date(),
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: userProfiles.userId,
+        set: {
+          displayName,
+          heightCm: height.heightCm,
+          heightEntryValue: height.heightEntryValue,
+          heightEntryUnit: height.heightEntryUnit,
+          updatedAt: new Date(),
+        },
+      });
 
-  await getDb()
-    .insert(userSettings)
-    .values({
-      userId: user.id,
-      weightUnit,
-      heightUnit,
-      waterUnit,
-      bloodGlucoseUnit,
-      dailyWaterGoalMl,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: userSettings.userId,
-      set: {
+    await getDb()
+      .insert(userSettings)
+      .values({
+        userId: user.id,
         weightUnit,
         heightUnit,
         waterUnit,
         bloodGlucoseUnit,
-        dailyWaterGoalMl,
+        dailyWaterGoalMl: Math.round(dailyWaterGoal.amountMl),
         updatedAt: new Date(),
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: {
+          weightUnit,
+          heightUnit,
+          waterUnit,
+          bloodGlucoseUnit,
+          dailyWaterGoalMl: Math.round(dailyWaterGoal.amountMl),
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    logActionError("Settings save failed", error);
+    redirect(`/settings?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
 
   revalidatePath("/settings");
   revalidatePath("/dashboard");
+  redirect("/settings?saved=1");
 }
 
 export async function createManualFoodAction(formData: FormData) {
@@ -228,40 +250,55 @@ export async function logFoodAction(formData: FormData) {
 
 export async function logWeightAction(formData: FormData) {
   const user = await requireUser();
-  const entryWeightValue = requiredNumber(formData, "entryWeightValue");
-  const entryWeightUnit = weightUnitSchema.parse(
-    requiredString(formData, "entryWeightUnit"),
-  );
+  try {
+    const entryWeightUnit = weightUnitSchema.parse(
+      requiredString(formData, "entryWeightUnit"),
+    );
+    const weight = validateWeightEntry(
+      requiredNumber(formData, "entryWeightValue"),
+      entryWeightUnit,
+    );
 
-  await getDb().insert(weightLogs).values({
-    userId: user.id,
-    logDate: requiredString(formData, "logDate"),
-    weightKg: normalizeWeightToKg(entryWeightValue, entryWeightUnit),
-    entryWeightValue,
-    entryWeightUnit,
-    notes: optionalString(formData, "notes"),
-  });
+    await getDb().insert(weightLogs).values({
+      userId: user.id,
+      logDate: requiredString(formData, "logDate"),
+      weightKg: weight.weightKg,
+      entryWeightValue: weight.entryWeightValue,
+      entryWeightUnit: weight.entryWeightUnit,
+      notes: optionalString(formData, "notes"),
+    });
+  } catch (error) {
+    logActionError("Weight log save failed", error);
+    redirect(`/weight?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
 
   revalidatePath("/weight");
   revalidatePath("/dashboard");
+  redirect("/weight?saved=1");
 }
 
 export async function logWaterAction(formData: FormData) {
   const user = await requireUser();
-  const entryAmount = requiredNumber(formData, "entryAmount");
-  const entryUnit = waterUnitSchema.parse(requiredString(formData, "entryUnit"));
+  try {
+    const entryUnit = waterUnitSchema.parse(requiredString(formData, "entryUnit"));
+    const water = validateWaterEntry(requiredNumber(formData, "entryAmount"), entryUnit);
 
-  await getDb().insert(waterLogs).values({
-    userId: user.id,
-    logDate: requiredString(formData, "logDate"),
-    amountMl: normalizeWaterToMl(entryAmount, entryUnit),
-    entryAmount,
-    entryUnit,
-    notes: optionalString(formData, "notes"),
-  });
+    await getDb().insert(waterLogs).values({
+      userId: user.id,
+      logDate: requiredString(formData, "logDate"),
+      amountMl: water.amountMl,
+      entryAmount: water.entryAmount,
+      entryUnit: water.entryUnit,
+      notes: optionalString(formData, "notes"),
+    });
+  } catch (error) {
+    logActionError("Water log save failed", error);
+    redirect(`/water?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
 
   revalidatePath("/water");
   revalidatePath("/dashboard");
+  redirect("/water?saved=1");
 }
 
 export async function logExerciseAction(formData: FormData) {
@@ -283,37 +320,71 @@ export async function logExerciseAction(formData: FormData) {
 
 export async function logBloodPressureAction(formData: FormData) {
   const user = await requireUser();
+  try {
+    const systolicMmhg = requiredInteger(formData, "systolicMmhg");
+    const diastolicMmhg = requiredInteger(formData, "diastolicMmhg");
+    const pulseBpm = optionalInteger(formData, "pulseBpm");
 
-  await getDb().insert(bloodPressureLogs).values({
-    userId: user.id,
-    logDate: requiredString(formData, "logDate"),
-    systolicMmhg: requiredInteger(formData, "systolicMmhg"),
-    diastolicMmhg: requiredInteger(formData, "diastolicMmhg"),
-    pulseBpm: optionalInteger(formData, "pulseBpm"),
-    notes: optionalString(formData, "notes"),
-  });
+    if (systolicMmhg < 50 || systolicMmhg > 260) {
+      throw new MeasurementValidationError(
+        "Systolic pressure must be between 50 and 260 mmHg.",
+      );
+    }
+    if (diastolicMmhg < 30 || diastolicMmhg > 160) {
+      throw new MeasurementValidationError(
+        "Diastolic pressure must be between 30 and 160 mmHg.",
+      );
+    }
+    if (pulseBpm !== null && (pulseBpm < 30 || pulseBpm > 220)) {
+      throw new MeasurementValidationError(
+        "Pulse must be between 30 and 220 bpm.",
+      );
+    }
+
+    await getDb().insert(bloodPressureLogs).values({
+      userId: user.id,
+      logDate: requiredString(formData, "logDate"),
+      systolicMmhg,
+      diastolicMmhg,
+      pulseBpm,
+      notes: optionalString(formData, "notes"),
+    });
+  } catch (error) {
+    logActionError("Blood pressure log save failed", error);
+    redirect(`/health?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
 
   revalidatePath("/health");
   revalidatePath("/dashboard");
+  redirect("/health?saved=pressure");
 }
 
 export async function logBloodGlucoseAction(formData: FormData) {
   const user = await requireUser();
-  const entryValue = requiredNumber(formData, "entryValue");
-  const entryUnit = glucoseUnitSchema.parse(requiredString(formData, "entryUnit"));
+  try {
+    const entryUnit = glucoseUnitSchema.parse(requiredString(formData, "entryUnit"));
+    const glucose = validateGlucoseEntry(
+      requiredNumber(formData, "entryValue"),
+      entryUnit,
+    );
 
-  await getDb().insert(bloodGlucoseLogs).values({
-    userId: user.id,
-    logDate: requiredString(formData, "logDate"),
-    glucoseMmolL: normalizeGlucoseToMmolL(entryValue, entryUnit),
-    entryValue,
-    entryUnit,
-    context: glucoseContextSchema.parse(requiredString(formData, "context")),
-    notes: optionalString(formData, "notes"),
-  });
+    await getDb().insert(bloodGlucoseLogs).values({
+      userId: user.id,
+      logDate: requiredString(formData, "logDate"),
+      glucoseMmolL: glucose.glucoseMmolL,
+      entryValue: glucose.entryValue,
+      entryUnit: glucose.entryUnit,
+      context: glucoseContextSchema.parse(requiredString(formData, "context")),
+      notes: optionalString(formData, "notes"),
+    });
+  } catch (error) {
+    logActionError("Blood glucose log save failed", error);
+    redirect(`/health?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
 
   revalidatePath("/health");
   revalidatePath("/dashboard");
+  redirect("/health?saved=glucose");
 }
 
 export async function deleteFoodLogAction(formData: FormData) {
@@ -433,4 +504,36 @@ function requiredInteger(formData: FormData, name: string) {
 function optionalInteger(formData: FormData, name: string) {
   const value = optionalNumber(formData, name);
   return value === null ? null : Math.round(value);
+}
+
+function actionErrorMessage(error: unknown) {
+  if (error instanceof MeasurementValidationError) {
+    return error.message;
+  }
+
+  if (error instanceof z.ZodError) {
+    return "Please check the selected unit and try again.";
+  }
+
+  if (error instanceof Error && error.message.endsWith("is required.")) {
+    return error.message;
+  }
+
+  return "Save failed. Please try again.";
+}
+
+function logActionError(message: string, error: unknown) {
+  if (error instanceof MeasurementValidationError) {
+    return;
+  }
+
+  if (error instanceof Error) {
+    console.error(message, {
+      name: error.name,
+      message: error.message,
+    });
+    return;
+  }
+
+  console.error(message, { error: String(error) });
 }

@@ -87,6 +87,15 @@ export function formatWeight(kg: number, unit: WeightUnit) {
     : `${formatNumber(kg, 1)} kg`;
 }
 
+export function formatHeight(cm: number, unit: HeightUnit) {
+  if (unit === "ft_in") {
+    const { feet, inches } = cmToFtIn(cm);
+    return `${feet} ft ${formatNumber(inches, 1)} in`;
+  }
+
+  return `${formatNumber(cm, 1)} cm`;
+}
+
 export function formatWater(ml: number, unit: WaterUnit) {
   if (unit === "oz") return `${formatNumber(mlToOz(ml), 1)} oz`;
   if (unit === "cups") {
