@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: homeplate-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: homeplate
+      POSTGRES_USER: homeplate
+      POSTGRES_PASSWORD: homeplate_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - homeplate-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homeplate -d homeplate"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  homeplate-postgres-data:

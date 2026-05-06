@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="HomePlate icon">
+  <rect width="512" height="512" rx="96" fill="#256f5b"/>
+  <path d="M96 238c0-75 61-136 136-136h48c75 0 136 61 136 136v4c0 25-20 45-45 45H141c-25 0-45-20-45-45v-4Z" fill="#f7faf8"/>
+  <path d="M150 318h212v46c0 25-20 46-46 46H196c-25 0-46-20-46-46v-46Z" fill="#f7faf8"/>
+  <circle cx="196" cy="226" r="34" fill="#f59e0b"/>
+  <path d="M252 190h74c10 0 18 8 18 18s-8 18-18 18h-74c-10 0-18-8-18-18s8-18 18-18Zm0 58h92c10 0 18 8 18 18s-8 18-18 18h-92c-10 0-18-8-18-18s8-18 18-18Z" fill="#256f5b"/>
+</svg>
