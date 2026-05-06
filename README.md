@@ -65,7 +65,7 @@ notepad .env.local
 Set these values in `.env.local`. Do not paste these lines directly into PowerShell; they belong in the file:
 
 ```env
-DATABASE_URL=postgres://homeplate:homeplate_dev_password@localhost:5432/homeplate
+DATABASE_URL=postgres://homeplate:homeplate_dev_password@localhost:5433/homeplate
 AUTH_SECRET=
 APP_BASE_URL=http://localhost:3000
 SEED_NEIL_EMAIL=
