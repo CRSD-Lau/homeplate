@@ -9,7 +9,8 @@ import { getDb } from "@/db";
 import { sessions, users } from "@/db/schema";
 
 export const SESSION_COOKIE_NAME = "homeplate_session";
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 180;
+const SESSION_MAX_AGE_SECONDS = SESSION_DAYS * 24 * 60 * 60;
 
 export type CurrentUser = {
   id: string;
@@ -40,6 +41,7 @@ export async function createSession(userId: string) {
     secure: process.env.NODE_ENV === "production",
     path: "/",
     expires: expiresAt,
+    maxAge: SESSION_MAX_AGE_SECONDS,
   });
 }
 
