@@ -18,8 +18,12 @@ export function subscribeToTheme(callback: () => void) {
 }
 
 export function getThemeSnapshot(): ThemePreference {
-  const stored = localStorage.getItem(themeStorageKey);
-  return isTheme(stored) ? stored : "system";
+  try {
+    const stored = localStorage.getItem(themeStorageKey);
+    return isTheme(stored) ? stored : "system";
+  } catch {
+    return "system";
+  }
 }
 
 export function getServerThemeSnapshot(): ThemePreference {
@@ -27,8 +31,14 @@ export function getServerThemeSnapshot(): ThemePreference {
 }
 
 export function setThemePreference(theme: ThemePreference) {
-  localStorage.setItem(themeStorageKey, theme);
   applyThemePreference(theme);
+
+  try {
+    localStorage.setItem(themeStorageKey, theme);
+  } catch {
+    // Keep the visual toggle working even if browser storage is unavailable.
+  }
+
   window.dispatchEvent(new Event(themeChangeEvent));
 }
 
@@ -38,6 +48,21 @@ export function applyThemePreference(theme: ThemePreference) {
 
   document.documentElement.classList.toggle("dark", dark);
   document.documentElement.dataset.theme = theme;
+}
+
+export function toggleThemePreference() {
+  const nextTheme = isDarkTheme(getThemeSnapshot()) ? "light" : "dark";
+  setThemePreference(nextTheme);
+
+  return nextTheme;
+}
+
+function isDarkTheme(theme: ThemePreference) {
+  return (
+    theme === "dark" ||
+    (theme === "system" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches)
+  );
 }
 
 function isTheme(value: string | null): value is ThemePreference {
