@@ -23,7 +23,7 @@ export default async function AdminPage() {
         <Panel title="Manual Source">
           {data.manualSource ? (
             <div>
-              <p className="font-medium text-[var(--brand-ink)]">{data.manualSource.name}</p>
+              <p className="font-bold text-[var(--brand-ink)]">{data.manualSource.name}</p>
               <p className="mt-1 text-sm text-[var(--brand-muted)]">
                 {data.manualSource.attribution}
               </p>

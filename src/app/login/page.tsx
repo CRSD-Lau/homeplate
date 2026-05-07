@@ -1,6 +1,7 @@
 import { Utensils } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { FormMessage } from "@/components/form-message";
 import { loginAction } from "./actions";
 import { getCurrentUser } from "@/lib/auth/session";
 
@@ -29,11 +30,7 @@ export default async function LoginPage({
           </div>
         </div>
 
-        {error ? (
-          <p className="mb-4 rounded-2xl border border-[var(--brand-coral)]/30 bg-[var(--brand-coral)]/10 px-3 py-2 text-sm font-bold text-[var(--brand-coral)]">
-            {error}
-          </p>
-        ) : null}
+        <FormMessage error={error} />
 
         <form action={loginAction} className="space-y-4">
           <label className="block">
