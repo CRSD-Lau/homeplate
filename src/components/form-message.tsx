@@ -9,7 +9,7 @@ export function FormMessage({
 }) {
   if (error) {
     return (
-      <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-200">
+      <p className="mb-4 rounded-2xl border border-[var(--brand-coral)]/30 bg-[var(--brand-coral)]/10 px-3 py-2 text-sm font-bold text-[var(--brand-coral)]">
         {error}
       </p>
     );
@@ -17,7 +17,7 @@ export function FormMessage({
 
   if (saved) {
     return (
-      <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-200">
+      <p className="mb-4 rounded-2xl border border-[var(--brand-green)]/30 bg-[var(--brand-green)]/10 px-3 py-2 text-sm font-bold text-[var(--brand-green)]">
         {savedText}
       </p>
     );
