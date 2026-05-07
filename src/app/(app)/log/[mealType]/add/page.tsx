@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Barcode, Camera, Mic, Search } from "lucide-react";
 
+import { EmptyState } from "@/components/ui/EmptyState";
 import { FoodSearchResult } from "@/components/tracking/FoodSearchResult";
 import { SavedMealCard } from "@/components/tracking/SavedMealCard";
 import { TrackingPageShell } from "@/components/tracking/TrackingPageShell";
@@ -121,9 +122,10 @@ export default async function AddFoodPage({
       ) : (
         <section className="hp-card p-4">
           {data.foodOptions.length === 0 ? (
-            <p className="text-sm font-medium text-[var(--brand-muted)]">
-              No foods match your search.
-            </p>
+            <EmptyState
+              title="No foods match your search."
+              description="Try a different term or add a manual food in Foods."
+            />
           ) : (
             data.foodOptions.slice(0, 80).map((food) => (
               <FoodSearchResult
@@ -179,7 +181,7 @@ function ComingSoon({
     >
       {icon}
       {label}
-      <span className="text-[0.65rem] font-bold uppercase">Phase 3</span>
+      <span className="text-[0.65rem] font-bold uppercase">Coming soon</span>
     </button>
   );
 }
