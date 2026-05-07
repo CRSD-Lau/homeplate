@@ -4,7 +4,14 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { updateSettingsAction } from "@/app/actions";
-import { cmToFtIn } from "@/lib/units";
+import type { DashboardPreferences } from "@/lib/dashboard-preferences";
+import {
+  cmToFtIn,
+  formatNumber,
+  kgToLb,
+  mlToOz,
+  ML_PER_CANADIAN_CUP,
+} from "@/lib/units";
 
 type SettingsFormProps = {
   displayName: string;
@@ -14,6 +21,8 @@ type SettingsFormProps = {
   waterUnit: "ml" | "oz" | "cups";
   bloodGlucoseUnit: "mmol_l" | "mg_dl";
   dailyWaterGoalMl: number;
+  goalWeightKg: number | null;
+  dashboardPreferences: DashboardPreferences;
   today: string;
   startingWeightText: string | null;
 };
@@ -26,18 +35,33 @@ export function SettingsForm({
   waterUnit,
   bloodGlucoseUnit,
   dailyWaterGoalMl,
+  goalWeightKg,
+  dashboardPreferences,
   today,
   startingWeightText,
 }: SettingsFormProps) {
   const [selectedHeightUnit, setSelectedHeightUnit] = useState(heightUnit);
   const [selectedWeightUnit, setSelectedWeightUnit] = useState(weightUnit);
+  const [selectedWaterUnit, setSelectedWaterUnit] = useState(waterUnit);
   const heightFtIn = heightCm ? cmToFtIn(heightCm) : null;
+  const dailyWaterGoalValue =
+    selectedWaterUnit === "oz"
+      ? formatNumber(mlToOz(dailyWaterGoalMl), 1)
+      : selectedWaterUnit === "cups"
+        ? formatNumber(dailyWaterGoalMl / ML_PER_CANADIAN_CUP, 1)
+        : dailyWaterGoalMl;
+  const goalWeightValue =
+    goalWeightKg === null
+      ? ""
+      : selectedWeightUnit === "lb"
+        ? formatNumber(kgToLb(goalWeightKg), 1)
+        : formatNumber(goalWeightKg, 1);
 
   return (
     <form action={updateSettingsAction} className="space-y-4">
       <SettingsSection
-        title="Profile details"
-        description="Store household profile details used for display and BMI calculations."
+        title="Profile"
+        description="Name and height used for display and BMI."
       >
         <Field label="Display name">
           <input
@@ -110,8 +134,8 @@ export function SettingsForm({
       </SettingsSection>
 
       <SettingsSection
-        title="Measurement preferences"
-        description="These controls choose the units used by logging screens."
+        title="Units"
+        description="Preferred units for logging screens."
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field
@@ -131,7 +155,14 @@ export function SettingsForm({
             </select>
           </Field>
           <Field label="Water unit">
-            <select name="waterUnit" defaultValue={waterUnit} className="field">
+            <select
+              name="waterUnit"
+              value={selectedWaterUnit}
+              onChange={(event) =>
+                setSelectedWaterUnit(event.target.value as "ml" | "oz" | "cups")
+              }
+              className="field"
+            >
               <option value="ml">ml</option>
               <option value="oz">oz</option>
               <option value="cups">cups</option>
@@ -153,7 +184,7 @@ export function SettingsForm({
 
       <SettingsSection
         title="Starting point"
-        description="Optional setup weight. This creates a dated weight log so dashboard, BMI, and trends have a baseline."
+        description="Optional baseline weight."
       >
         {startingWeightText ? (
           <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100">
@@ -193,8 +224,8 @@ export function SettingsForm({
       </SettingsSection>
 
       <SettingsSection
-        title="Daily targets"
-        description="Set simple household wellness targets for dashboard progress."
+        title="Goals"
+        description="Targets for dashboard progress."
       >
         <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-3">
           <Field label="Daily water goal">
@@ -202,8 +233,8 @@ export function SettingsForm({
               name="dailyWaterGoal"
               type="number"
               inputMode="decimal"
-              step="1"
-              defaultValue={dailyWaterGoalMl}
+              step="0.1"
+              defaultValue={dailyWaterGoalValue}
               required
               className="field"
             />
@@ -211,13 +242,77 @@ export function SettingsForm({
           <Field label="Goal unit">
             <select
               name="dailyWaterGoalUnit"
-              defaultValue="ml"
+              value={selectedWaterUnit}
+              onChange={(event) =>
+                setSelectedWaterUnit(event.target.value as "ml" | "oz" | "cups")
+              }
               className="field"
             >
               <option value="ml">ml</option>
               <option value="oz">oz</option>
               <option value="cups">cups</option>
             </select>
+          </Field>
+        </div>
+        <Field label="Daily calories target">
+          <input
+            name="calorieTarget"
+            type="number"
+            inputMode="numeric"
+            min="1"
+            step="1"
+            defaultValue={dashboardPreferences.calorieTarget ?? ""}
+            placeholder="2100"
+            className="field"
+          />
+        </Field>
+        <Field label={`Goal weight (${selectedWeightUnit})`}>
+          <input
+            name="goalWeightValue"
+            type="number"
+            inputMode="decimal"
+            min={selectedWeightUnit === "lb" ? 50 : 20}
+            max={selectedWeightUnit === "lb" ? 800 : 360}
+            step="0.1"
+            defaultValue={goalWeightValue}
+            placeholder={selectedWeightUnit === "lb" ? "185" : "84"}
+            className="field"
+          />
+          <input name="goalWeightUnit" type="hidden" value={selectedWeightUnit} />
+        </Field>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Protein g">
+            <input
+              name="proteinTargetG"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              step="1"
+              defaultValue={dashboardPreferences.macroTargets.proteinG ?? ""}
+              className="field"
+            />
+          </Field>
+          <Field label="Carbs g">
+            <input
+              name="carbsTargetG"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              step="1"
+              defaultValue={dashboardPreferences.macroTargets.carbsG ?? ""}
+              className="field"
+            />
+          </Field>
+          <Field label="Fat g">
+            <input
+              name="fatTargetG"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              step="1"
+              defaultValue={dashboardPreferences.macroTargets.fatG ?? ""}
+              className="field"
+            />
           </Field>
         </div>
       </SettingsSection>
@@ -239,12 +334,12 @@ function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-950/60 sm:p-4">
+    <section className="space-y-3 rounded-2xl border border-[var(--brand-line)] bg-[var(--brand-soft)]/60 p-3 sm:p-4">
       <div>
-        <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-50">
+        <h3 className="text-base font-extrabold text-[var(--brand-ink)]">
           {title}
         </h3>
-        <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">
+        <p className="mt-1 text-xs font-medium leading-5 text-[var(--brand-muted)]">
           {description}
         </p>
       </div>
@@ -264,12 +359,12 @@ function Field({
 }) {
   return (
     <label className="block min-w-0">
-      <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+      <span className="text-sm font-bold text-[var(--brand-ink)]">
         {label}
       </span>
       <div className="mt-1">{children}</div>
       {hint ? (
-        <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-300">
+        <span className="mt-1 block text-xs font-medium leading-5 text-[var(--brand-muted)]">
           {hint}
         </span>
       ) : null}

@@ -1,148 +1,133 @@
-import { Trash2 } from "lucide-react";
+import Link from "next/link";
+import { BarChart3, CheckCircle2, Search } from "lucide-react";
 
-import { deleteFoodLogAction, logFoodAction } from "@/app/actions";
-import { PageHeader, Panel } from "@/components/page-header";
+import { MealRow } from "@/components/tracking/MealRow";
+import { TrackingPageShell } from "@/components/tracking/TrackingPageShell";
 import { getFoodLogPageData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
-import { toDateInputValue } from "@/lib/dates";
+import { normalizeDateInputValue } from "@/lib/dates";
+import {
+  ACTIVE_MEAL_TYPES,
+  formatMealLabel,
+  normalizeMealType,
+} from "@/lib/tracking";
 import { formatNumber } from "@/lib/units";
 
-const mealTypes = ["breakfast", "lunch", "dinner", "snack"] as const;
-
-export default async function FoodLogPage() {
-  const user = await requireUser();
-  const data = await getFoodLogPageData(user.id);
-  const logsByMeal = Object.fromEntries(
-    mealTypes.map((meal) => [
-      meal,
-      data.logs.filter((log) => log.mealType === meal),
-    ]),
-  ) as Record<(typeof mealTypes)[number], typeof data.logs>;
-
-  return (
-    <>
-      <PageHeader
-        title="Food Log"
-        description="Log foods by meal. Nutrition totals use snapshots, so old logs stay stable if a food is edited later."
-      />
-
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <Panel title="Add Food">
-          {data.foodOptions.length === 0 ? (
-            <p className="text-sm text-slate-600">
-              Add a manual food first, then it will appear here.
-            </p>
-          ) : (
-            <form action={logFoodAction} className="space-y-3">
-              <Field label="Date">
-                <input
-                  name="logDate"
-                  type="date"
-                  defaultValue={toDateInputValue()}
-                  required
-                  className="field"
-                />
-              </Field>
-              <Field label="Meal">
-                <select name="mealType" defaultValue="breakfast" className="field">
-                  {mealTypes.map((meal) => (
-                    <option key={meal} value={meal}>
-                      {labelMeal(meal)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Food">
-                <select name="foodServing" required className="field">
-                  {data.foodOptions.map((food) => (
-                    <option
-                      key={`${food.foodId}-${food.servingId}`}
-                      value={`${food.foodId}|${food.servingId}`}
-                    >
-                      {food.brand ? `${food.brand} ` : ""}
-                      {food.foodName} ({food.servingLabel})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Quantity">
-                <input
-                  name="quantity"
-                  type="number"
-                  min="0.1"
-                  step="0.1"
-                  defaultValue="1"
-                  required
-                  className="field"
-                />
-              </Field>
-              <Field label="Notes">
-                <textarea name="notes" rows={2} className="field min-h-20" />
-              </Field>
-              <button className="primary-button" type="submit">
-                Log food
-              </button>
-            </form>
-          )}
-        </Panel>
-
-        <div className="space-y-4">
-          {mealTypes.map((meal) => (
-            <Panel key={meal} title={labelMeal(meal)}>
-              {logsByMeal[meal].length === 0 ? (
-                <p className="text-sm text-slate-500">No foods logged yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {logsByMeal[meal].map((log) => (
-                    <div
-                      key={log.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2"
-                    >
-                      <div>
-                        <p className="font-medium">{log.foodNameSnapshot}</p>
-                        <p className="text-sm text-slate-500">
-                          {log.quantity} x {log.servingLabelSnapshot} ·{" "}
-                          {formatNumber(log.caloriesSnapshot, 0)} kcal ·{" "}
-                          {formatNumber(log.proteinGSnapshot, 0)}g protein
-                        </p>
-                      </div>
-                      <form action={deleteFoodLogAction}>
-                        <input type="hidden" name="id" value={log.id} />
-                        <button
-                          className="icon-button"
-                          type="submit"
-                          title="Delete food log"
-                        >
-                          <Trash2 aria-hidden="true" size={16} />
-                        </button>
-                      </form>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Panel>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function Field({
-  label,
-  children,
+export default async function FoodLogPage({
+  searchParams,
 }: {
-  label: string;
-  children: React.ReactNode;
+  searchParams: Promise<{ date?: string }>;
 }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      <div className="mt-1">{children}</div>
-    </label>
-  );
-}
+  const user = await requireUser();
+  const params = await searchParams;
+  const selectedDate = normalizeDateInputValue(params.date);
+  const data = await getFoodLogPageData(user.id, selectedDate);
 
-function labelMeal(meal: string) {
-  return meal.charAt(0).toUpperCase() + meal.slice(1);
+  return (
+    <TrackingPageShell
+      title="Today"
+      eyebrow={data.date}
+      action={
+        <span className="text-right text-lg font-extrabold text-[var(--brand-ink)]">
+          {formatNumber(data.nutrition.calories, 0)} cal
+        </span>
+      }
+    >
+      <form
+        action="/log"
+        className="mx-auto flex min-h-14 max-w-sm items-center gap-2 rounded-full border border-[var(--brand-line)] bg-[var(--brand-card)] px-4 shadow-sm"
+      >
+        <input
+          name="date"
+          type="date"
+          defaultValue={data.date}
+          className="min-h-11 flex-1 bg-transparent text-center font-bold text-[var(--brand-ink)] outline-none"
+        />
+        <button
+          type="submit"
+          className="min-h-11 min-w-12 rounded-full px-3 text-sm font-bold text-[var(--brand-teal)] hover:bg-[var(--brand-soft)]"
+        >
+          Go
+        </button>
+      </form>
+
+      <section className="hp-card p-4">
+        {ACTIVE_MEAL_TYPES.map((mealType) => {
+          const logs = data.logs.filter(
+            (log) => normalizeMealType(log.mealType) === mealType,
+          );
+          return (
+            <MealRow
+              key={mealType}
+              mealType={mealType}
+              date={data.date}
+              calories={data.mealTotals.byMeal[mealType].calories}
+              itemCount={logs.length}
+            />
+          );
+        })}
+      </section>
+
+      <section className="hp-card p-4">
+        <h2 className="mb-3 text-xl font-extrabold text-[var(--brand-ink)]">
+          Quick add
+        </h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Link
+            href={`/log/breakfast/add?date=${data.date}`}
+            className="secondary-button flex items-center justify-center gap-2"
+          >
+            <Search aria-hidden="true" size={18} />
+            Search foods
+          </Link>
+          <Link
+            href="/foods"
+            className="secondary-button flex items-center justify-center gap-2"
+          >
+            Create manual food
+          </Link>
+        </div>
+        {data.recentFoods.length > 0 ? (
+          <div className="-mx-1 mt-4 flex gap-3 overflow-x-auto px-1 pb-2">
+            {data.recentFoods.map((food) => (
+              <Link
+                key={`${food.foodId}|${food.servingId}`}
+                href={`/log/breakfast/add?date=${data.date}&q=${encodeURIComponent(
+                  food.foodName,
+                )}`}
+                className="hp-card min-w-40 p-3"
+              >
+                <p className="line-clamp-2 text-sm font-extrabold text-[var(--brand-ink)]">
+                  {food.foodName}
+                </p>
+                <p className="mt-2 text-lg font-extrabold text-[var(--brand-ink)]">
+                  {formatNumber(food.calories, 0)} cal
+                </p>
+                <p className="text-xs font-medium text-[var(--brand-muted)]">
+                  Default meal: {formatMealLabel("breakfast")}
+                </p>
+              </Link>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/health"
+          className="secondary-button flex min-h-14 items-center justify-center gap-2"
+        >
+          <BarChart3 aria-hidden="true" size={19} />
+          View analysis
+        </Link>
+        <Link
+          href="/dashboard"
+          className="primary-button flex min-h-14 items-center justify-center gap-2"
+        >
+          <CheckCircle2 aria-hidden="true" size={19} />
+          Finish day
+        </Link>
+      </div>
+    </TrackingPageShell>
+  );
 }

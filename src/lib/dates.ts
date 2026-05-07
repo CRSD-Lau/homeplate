@@ -1,7 +1,34 @@
-import { eachDayOfInterval, format, subDays } from "date-fns";
+import {
+  addDays,
+  eachDayOfInterval,
+  format,
+  parse,
+  startOfWeek,
+  subDays,
+} from "date-fns";
 
 export function toDateInputValue(date = new Date()) {
   return format(date, "yyyy-MM-dd");
+}
+
+export function normalizeDateInputValue(value: string | null | undefined) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value
+    : toDateInputValue();
+}
+
+export function parseDateInputValue(value: string) {
+  return parse(value, "yyyy-MM-dd", new Date());
+}
+
+export function currentWeekDateKeys(selectedDate = toDateInputValue()) {
+  const weekStart = startOfWeek(parseDateInputValue(selectedDate), {
+    weekStartsOn: 1,
+  });
+
+  return Array.from({ length: 7 }, (_, index) =>
+    toDateInputValue(addDays(weekStart, index)),
+  );
 }
 
 export function recentDateKeys(days: number, endDate = new Date()) {

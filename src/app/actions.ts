@@ -14,14 +14,29 @@ import {
   foodLogs,
   foodNutrientValues,
   foods,
+  savedMealItems,
+  savedMeals,
   servings,
+  stepLogs,
   userProfiles,
   userSettings,
   waterLogs,
   weightLogs,
 } from "@/db/schema";
 import { destroySession, requireUser } from "@/lib/auth/session";
+import {
+  serializeDashboardPreferences,
+  type DashboardPreferences,
+} from "@/lib/dashboard-preferences";
+import {
+  removeProfilePicture,
+  saveProfilePicture,
+} from "@/lib/profile-picture";
 import { scaleNutrients } from "@/lib/nutrition";
+import {
+  ALL_MEAL_TYPES,
+  normalizeMealType,
+} from "@/lib/tracking";
 import {
   MeasurementValidationError,
   validateGlucoseEntry,
@@ -31,7 +46,7 @@ import {
 } from "@/lib/validation/measurements";
 import { toDateInputValue } from "@/lib/dates";
 
-const mealTypeSchema = z.enum(["breakfast", "lunch", "dinner", "snack"]);
+const mealTypeSchema = z.enum(ALL_MEAL_TYPES);
 const weightUnitSchema = z.enum(["lb", "kg"]);
 const heightUnitSchema = z.enum(["cm", "ft_in"]);
 const waterUnitSchema = z.enum(["ml", "oz", "cups"]);
@@ -43,6 +58,20 @@ const glucoseContextSchema = z.enum([
   "bedtime",
   "other",
 ]);
+
+const allowedReturnPathnames = new Set([
+  "/dashboard",
+  "/exercise",
+  "/foods",
+  "/health",
+  "/log",
+  "/movement",
+  "/settings",
+  "/water",
+  "/weight",
+  "/scan",
+]);
+const allowedReturnPathPrefixes = ["/log/"];
 
 export async function logoutAction() {
   await destroySession();
@@ -72,6 +101,14 @@ export async function updateSettingsAction(formData: FormData) {
       requiredNumber(formData, "dailyWaterGoal"),
       dailyWaterGoalUnit,
     );
+    const dashboardPreferences: DashboardPreferences = {
+      calorieTarget: optionalPositiveNumber(formData, "calorieTarget"),
+      macroTargets: {
+        proteinG: optionalPositiveNumber(formData, "proteinTargetG"),
+        carbsG: optionalPositiveNumber(formData, "carbsTargetG"),
+        fatG: optionalPositiveNumber(formData, "fatTargetG"),
+      },
+    };
 
     const heightEntryValue = optionalNumber(formData, "heightValue");
     const heightEntryInches = optionalNumber(formData, "heightInches") ?? 0;
@@ -87,6 +124,14 @@ export async function updateSettingsAction(formData: FormData) {
             value: heightEntryValue,
             inches: heightEntryInches,
           });
+    const goalWeightValue = optionalNumber(formData, "goalWeightValue");
+    const goalWeight =
+      goalWeightValue === null
+        ? null
+        : validateWeightEntry(
+            goalWeightValue,
+            weightUnitSchema.parse(requiredString(formData, "goalWeightUnit")),
+          ).weightKg;
 
     await getDb()
       .insert(userProfiles)
@@ -96,6 +141,7 @@ export async function updateSettingsAction(formData: FormData) {
         heightCm: height.heightCm,
         heightEntryValue: height.heightEntryValue,
         heightEntryUnit: height.heightEntryUnit,
+        goalWeightKg: goalWeight,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -105,6 +151,7 @@ export async function updateSettingsAction(formData: FormData) {
           heightCm: height.heightCm,
           heightEntryValue: height.heightEntryValue,
           heightEntryUnit: height.heightEntryUnit,
+          goalWeightKg: goalWeight,
           updatedAt: new Date(),
         },
       });
@@ -118,6 +165,7 @@ export async function updateSettingsAction(formData: FormData) {
         waterUnit,
         bloodGlucoseUnit,
         dailyWaterGoalMl: Math.round(dailyWaterGoal.amountMl),
+        dashboardPreferences: serializeDashboardPreferences(dashboardPreferences),
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -128,6 +176,7 @@ export async function updateSettingsAction(formData: FormData) {
           waterUnit,
           bloodGlucoseUnit,
           dailyWaterGoalMl: Math.round(dailyWaterGoal.amountMl),
+          dashboardPreferences: serializeDashboardPreferences(dashboardPreferences),
           updatedAt: new Date(),
         },
       });
@@ -162,6 +211,42 @@ export async function updateSettingsAction(formData: FormData) {
   revalidatePath("/weight");
   revalidatePath("/dashboard");
   redirect("/settings?saved=1");
+}
+
+export async function uploadProfilePictureAction(formData: FormData) {
+  const user = await requireUser();
+
+  try {
+    const file = formData.get("profilePicture");
+
+    if (!(file instanceof File)) {
+      throw new Error("Choose an image before uploading.");
+    }
+
+    await saveProfilePicture(user.id, file);
+  } catch (error) {
+    logActionError("Profile picture upload failed", error);
+    redirect(`/settings?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  redirect("/settings?saved=profile-picture");
+}
+
+export async function removeProfilePictureAction() {
+  const user = await requireUser();
+
+  try {
+    await removeProfilePicture(user.id);
+  } catch (error) {
+    logActionError("Profile picture removal failed", error);
+    redirect(`/settings?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  redirect("/settings?saved=profile-picture-removed");
 }
 
 export async function createManualFoodAction(formData: FormData) {
@@ -205,6 +290,72 @@ export async function createManualFoodAction(formData: FormData) {
 
   revalidatePath("/foods");
   revalidatePath("/log");
+  redirect("/foods?saved=food");
+}
+
+export async function updateManualFoodAction(formData: FormData) {
+  await requireUser();
+  const foodId = requiredString(formData, "foodId");
+
+  const [food] = await getDb()
+    .select({ id: foods.id, foodType: foods.foodType })
+    .from(foods)
+    .where(and(eq(foods.id, foodId), eq(foods.foodType, "manual")))
+    .limit(1);
+
+  if (!food) {
+    redirect(
+      `/foods?error=${encodeURIComponent("Only manual foods can be edited.")}`,
+    );
+  }
+
+  const [serving] = await getDb()
+    .select({ id: servings.id })
+    .from(servings)
+    .where(and(eq(servings.foodId, foodId), eq(servings.isDefault, true)))
+    .limit(1);
+
+  if (!serving) {
+    redirect(
+      `/foods?error=${encodeURIComponent("Default serving could not be found.")}`,
+    );
+  }
+
+  await getDb()
+    .update(foods)
+    .set({
+      name: requiredString(formData, "name"),
+      brand: optionalString(formData, "brand"),
+      updatedAt: new Date(),
+    })
+    .where(eq(foods.id, foodId));
+
+  await getDb()
+    .update(servings)
+    .set({
+      label: requiredString(formData, "servingLabel"),
+      grams: optionalNumber(formData, "grams"),
+      millilitres: optionalNumber(formData, "millilitres"),
+    })
+    .where(eq(servings.id, serving.id));
+
+  await getDb()
+    .update(foodNutrientValues)
+    .set({
+      calories: requiredNumber(formData, "calories"),
+      proteinG: requiredNumber(formData, "proteinG"),
+      carbsG: requiredNumber(formData, "carbsG"),
+      fatG: requiredNumber(formData, "fatG"),
+      fibreG: optionalNumber(formData, "fibreG"),
+      sugarG: optionalNumber(formData, "sugarG"),
+      sodiumMg: optionalNumber(formData, "sodiumMg"),
+    })
+    .where(eq(foodNutrientValues.servingId, serving.id));
+
+  revalidatePath("/foods");
+  revalidatePath("/log");
+  revalidatePath("/dashboard");
+  redirect(`/foods?saved=food`);
 }
 
 export async function logFoodAction(formData: FormData) {
@@ -212,7 +363,14 @@ export async function logFoodAction(formData: FormData) {
   const foodServing = requiredString(formData, "foodServing").split("|");
   const [foodId, servingId] = foodServing;
   const quantity = requiredNumber(formData, "quantity");
-  const mealType = mealTypeSchema.parse(requiredString(formData, "mealType"));
+  const logDate = requiredString(formData, "logDate");
+  const mealType = normalizeMealType(
+    mealTypeSchema.parse(requiredString(formData, "mealType")),
+  );
+  const successPath = safeReturnTo(
+    formData,
+    `/log?date=${encodeURIComponent(logDate)}&meal=${mealType}`,
+  );
 
   const [row] = await getDb()
     .select({
@@ -249,7 +407,7 @@ export async function logFoodAction(formData: FormData) {
     userId: user.id,
     foodId: row.foodId,
     servingId: row.servingId,
-    logDate: requiredString(formData, "logDate"),
+    logDate,
     mealType,
     quantity,
     foodNameSnapshot: row.brand ? `${row.brand} ${row.foodName}` : row.foodName,
@@ -270,10 +428,13 @@ export async function logFoodAction(formData: FormData) {
 
   revalidatePath("/log");
   revalidatePath("/dashboard");
+  revalidatePath("/health");
+  redirect(successPath);
 }
 
 export async function logWeightAction(formData: FormData) {
   const user = await requireUser();
+  const successPath = safeReturnTo(formData, "/weight?saved=1");
   try {
     const entryWeightUnit = weightUnitSchema.parse(
       requiredString(formData, "entryWeightUnit"),
@@ -298,11 +459,13 @@ export async function logWeightAction(formData: FormData) {
 
   revalidatePath("/weight");
   revalidatePath("/dashboard");
-  redirect("/weight?saved=1");
+  revalidatePath("/health");
+  redirect(successPath);
 }
 
 export async function logWaterAction(formData: FormData) {
   const user = await requireUser();
+  const successPath = safeReturnTo(formData, "/water?saved=1");
   try {
     const entryUnit = waterUnitSchema.parse(requiredString(formData, "entryUnit"));
     const water = validateWaterEntry(requiredNumber(formData, "entryAmount"), entryUnit);
@@ -322,11 +485,13 @@ export async function logWaterAction(formData: FormData) {
 
   revalidatePath("/water");
   revalidatePath("/dashboard");
-  redirect("/water?saved=1");
+  revalidatePath("/health");
+  redirect(successPath);
 }
 
 export async function logExerciseAction(formData: FormData) {
   const user = await requireUser();
+  const successPath = safeReturnTo(formData, "/movement?saved=1");
 
   await getDb().insert(exerciseLogs).values({
     userId: user.id,
@@ -339,11 +504,306 @@ export async function logExerciseAction(formData: FormData) {
   });
 
   revalidatePath("/exercise");
+  revalidatePath("/movement");
   revalidatePath("/dashboard");
+  revalidatePath("/health");
+  redirect(successPath);
+}
+
+export async function logStepAction(formData: FormData) {
+  const user = await requireUser();
+  const successPath = safeReturnTo(formData, "/movement?saved=steps");
+
+  try {
+    const steps = requiredInteger(formData, "steps");
+    if (steps < 1 || steps > 200000) {
+      throw new MeasurementValidationError(
+        "Steps must be between 1 and 200,000.",
+      );
+    }
+
+    await getDb().insert(stepLogs).values({
+      userId: user.id,
+      logDate: requiredString(formData, "logDate"),
+      steps,
+      source: "manual",
+      notes: optionalString(formData, "notes"),
+    });
+  } catch (error) {
+    logActionError("Step log save failed", error);
+    redirect(`/movement?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
+
+  revalidatePath("/movement");
+  revalidatePath("/dashboard");
+  redirect(successPath);
+}
+
+export async function setGoalWeightAction(formData: FormData) {
+  const user = await requireUser();
+  const successPath = safeReturnTo(formData, "/weight?saved=goal");
+
+  try {
+    const value = optionalNumber(formData, "goalWeightValue");
+    const goalWeightKg =
+      value === null
+        ? null
+        : validateWeightEntry(
+            value,
+            weightUnitSchema.parse(requiredString(formData, "goalWeightUnit")),
+          ).weightKg;
+
+    await getDb()
+      .insert(userProfiles)
+      .values({
+        userId: user.id,
+        displayName: user.displayName,
+        goalWeightKg,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: userProfiles.userId,
+        set: {
+          goalWeightKg,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (error) {
+    logActionError("Goal weight save failed", error);
+    redirect(`/weight?error=${encodeURIComponent(actionErrorMessage(error))}`);
+  }
+
+  revalidatePath("/weight");
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  redirect(successPath);
+}
+
+export async function updateFoodLogQuantityAction(formData: FormData) {
+  const user = await requireUser();
+  const id = requiredString(formData, "id");
+  const quantity = requiredNumber(formData, "quantity");
+  const successPath = safeReturnTo(formData, "/log?saved=quantity");
+
+  if (quantity <= 0 || quantity > 100) {
+    redirect(`/log?error=${encodeURIComponent("Quantity must be above 0.")}`);
+  }
+
+  const [log] = await getDb()
+    .select()
+    .from(foodLogs)
+    .where(and(eq(foodLogs.id, id), eq(foodLogs.userId, user.id)))
+    .limit(1);
+
+  if (!log) {
+    redirect(`/log?error=${encodeURIComponent("Food log could not be found.")}`);
+  }
+
+  const ratio = log.quantity > 0 ? quantity / log.quantity : quantity;
+
+  await getDb()
+    .update(foodLogs)
+    .set({
+      quantity,
+      caloriesSnapshot: log.caloriesSnapshot * ratio,
+      proteinGSnapshot: log.proteinGSnapshot * ratio,
+      carbsGSnapshot: log.carbsGSnapshot * ratio,
+      fatGSnapshot: log.fatGSnapshot * ratio,
+      fibreGSnapshot:
+        log.fibreGSnapshot === null ? null : log.fibreGSnapshot * ratio,
+      sugarGSnapshot:
+        log.sugarGSnapshot === null ? null : log.sugarGSnapshot * ratio,
+      sodiumMgSnapshot:
+        log.sodiumMgSnapshot === null ? null : log.sodiumMgSnapshot * ratio,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(foodLogs.id, id), eq(foodLogs.userId, user.id)));
+
+  revalidatePath("/log");
+  revalidatePath("/dashboard");
+  revalidatePath("/health");
+  redirect(successPath);
+}
+
+export async function saveMealAction(formData: FormData) {
+  const user = await requireUser();
+  const logDate = requiredString(formData, "logDate");
+  const mealType = normalizeMealType(
+    mealTypeSchema.parse(requiredString(formData, "mealType")),
+  );
+  const successPath = safeReturnTo(
+    formData,
+    `/log/${mealType}/review?date=${encodeURIComponent(logDate)}&saved=meal`,
+  );
+
+  const rows = await getDb()
+    .select()
+    .from(foodLogs)
+    .where(
+      and(
+        eq(foodLogs.userId, user.id),
+        eq(foodLogs.logDate, logDate),
+        eq(foodLogs.mealType, mealType),
+      ),
+    );
+
+  const savableRows = rows.filter((row) => row.foodId);
+  if (savableRows.length === 0) {
+    redirect(
+      `/log/${mealType}/review?date=${encodeURIComponent(
+        logDate,
+      )}&error=${encodeURIComponent("Add foods before saving a meal.")}`,
+    );
+  }
+
+  const [meal] = await getDb()
+    .insert(savedMeals)
+    .values({
+      userId: user.id,
+      name: requiredString(formData, "name"),
+      mealType,
+      notes: optionalString(formData, "notes"),
+    })
+    .returning({ id: savedMeals.id });
+
+  await getDb().insert(savedMealItems).values(
+    savableRows.map((row) => ({
+      savedMealId: meal.id,
+      foodId: row.foodId!,
+      servingId: row.servingId,
+      quantity: row.quantity,
+    })),
+  );
+
+  revalidatePath("/log");
+  redirect(successPath);
+}
+
+export async function updateSavedMealAction(formData: FormData) {
+  const user = await requireUser();
+  const id = requiredString(formData, "id");
+  const mealTypeValue = optionalString(formData, "mealType");
+  const mealType = mealTypeValue
+    ? normalizeMealType(mealTypeSchema.parse(mealTypeValue))
+    : null;
+  const successPath = safeReturnTo(formData, "/log?saved=meal-updated");
+
+  await getDb()
+    .update(savedMeals)
+    .set({
+      name: requiredString(formData, "name"),
+      mealType,
+      notes: optionalString(formData, "notes"),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(savedMeals.id, id), eq(savedMeals.userId, user.id)));
+
+  revalidatePath("/log");
+  redirect(successPath);
+}
+
+export async function deleteSavedMealAction(formData: FormData) {
+  const user = await requireUser();
+  const id = requiredString(formData, "id");
+  const successPath = safeReturnTo(formData, "/log?saved=meal-deleted");
+
+  await getDb()
+    .delete(savedMeals)
+    .where(and(eq(savedMeals.id, id), eq(savedMeals.userId, user.id)));
+
+  revalidatePath("/log");
+  redirect(successPath);
+}
+
+export async function addSavedMealToLogAction(formData: FormData) {
+  const user = await requireUser();
+  const savedMealId = requiredString(formData, "savedMealId");
+  const logDate = requiredString(formData, "logDate");
+  const mealType = normalizeMealType(
+    mealTypeSchema.parse(requiredString(formData, "mealType")),
+  );
+  const successPath = safeReturnTo(
+    formData,
+    `/log/${mealType}/review?date=${encodeURIComponent(logDate)}&saved=meal`,
+  );
+
+  const [savedMeal] = await getDb()
+    .select({ id: savedMeals.id })
+    .from(savedMeals)
+    .where(and(eq(savedMeals.id, savedMealId), eq(savedMeals.userId, user.id)))
+    .limit(1);
+
+  if (!savedMeal) {
+    redirect(`/log?error=${encodeURIComponent("Saved meal could not be found.")}`);
+  }
+
+  const rows = await getDb()
+    .select({
+      foodId: foods.id,
+      foodName: foods.name,
+      brand: foods.brand,
+      confidenceStatus: foods.confidenceStatus,
+      servingId: servings.id,
+      servingLabel: servings.label,
+      quantity: savedMealItems.quantity,
+      calories: foodNutrientValues.calories,
+      proteinG: foodNutrientValues.proteinG,
+      carbsG: foodNutrientValues.carbsG,
+      fatG: foodNutrientValues.fatG,
+      fibreG: foodNutrientValues.fibreG,
+      sugarG: foodNutrientValues.sugarG,
+      sodiumMg: foodNutrientValues.sodiumMg,
+    })
+    .from(savedMealItems)
+    .innerJoin(foods, eq(savedMealItems.foodId, foods.id))
+    .leftJoin(servings, eq(savedMealItems.servingId, servings.id))
+    .innerJoin(
+      foodNutrientValues,
+      eq(foodNutrientValues.servingId, savedMealItems.servingId),
+    )
+    .where(eq(savedMealItems.savedMealId, savedMealId));
+
+  if (rows.length === 0) {
+    redirect(`/log?error=${encodeURIComponent("Saved meal has no foods.")}`);
+  }
+
+  await getDb().insert(foodLogs).values(
+    rows.map((row) => {
+      const scaled = scaleNutrients(row, row.quantity);
+      return {
+        userId: user.id,
+        foodId: row.foodId,
+        servingId: row.servingId,
+        logDate,
+        mealType,
+        quantity: row.quantity,
+        foodNameSnapshot: row.brand ? `${row.brand} ${row.foodName}` : row.foodName,
+        servingLabelSnapshot: row.servingLabel,
+        caloriesSnapshot: scaled.calories,
+        proteinGSnapshot: scaled.proteinG,
+        carbsGSnapshot: scaled.carbsG,
+        fatGSnapshot: scaled.fatG,
+        fibreGSnapshot: scaled.fibreG ?? null,
+        sugarGSnapshot: scaled.sugarG ?? null,
+        sodiumMgSnapshot: scaled.sodiumMg ?? null,
+        sourceSnapshot: {
+          confidenceStatus: row.confidenceStatus,
+          source: "saved_meal",
+          savedMealId,
+        },
+      };
+    }),
+  );
+
+  revalidatePath("/log");
+  revalidatePath("/dashboard");
+  revalidatePath("/health");
+  redirect(successPath);
 }
 
 export async function logBloodPressureAction(formData: FormData) {
   const user = await requireUser();
+  const successPath = safeReturnTo(formData, "/health?saved=pressure");
   try {
     const systolicMmhg = requiredInteger(formData, "systolicMmhg");
     const diastolicMmhg = requiredInteger(formData, "diastolicMmhg");
@@ -380,11 +840,12 @@ export async function logBloodPressureAction(formData: FormData) {
 
   revalidatePath("/health");
   revalidatePath("/dashboard");
-  redirect("/health?saved=pressure");
+  redirect(successPath);
 }
 
 export async function logBloodGlucoseAction(formData: FormData) {
   const user = await requireUser();
+  const successPath = safeReturnTo(formData, "/health?saved=glucose");
   try {
     const entryUnit = glucoseUnitSchema.parse(requiredString(formData, "entryUnit"));
     const glucose = validateGlucoseEntry(
@@ -408,11 +869,13 @@ export async function logBloodGlucoseAction(formData: FormData) {
 
   revalidatePath("/health");
   revalidatePath("/dashboard");
-  redirect("/health?saved=glucose");
+  redirect(successPath);
 }
 
 export async function deleteFoodLogAction(formData: FormData) {
+  const successPath = safeReturnTo(formData, "/log");
   await deleteOwnLog(foodLogs, requiredString(formData, "id"), "/log");
+  redirect(successPath);
 }
 
 export async function deleteWeightLogAction(formData: FormData) {
@@ -424,7 +887,11 @@ export async function deleteWaterLogAction(formData: FormData) {
 }
 
 export async function deleteExerciseLogAction(formData: FormData) {
-  await deleteOwnLog(exerciseLogs, requiredString(formData, "id"), "/exercise");
+  await deleteOwnLog(exerciseLogs, requiredString(formData, "id"), "/movement");
+}
+
+export async function deleteStepLogAction(formData: FormData) {
+  await deleteOwnLog(stepLogs, requiredString(formData, "id"), "/movement");
 }
 
 export async function deleteBloodPressureLogAction(formData: FormData) {
@@ -466,6 +933,7 @@ async function deleteOwnLog(
     | typeof weightLogs
     | typeof waterLogs
     | typeof exerciseLogs
+    | typeof stepLogs
     | typeof bloodPressureLogs
     | typeof bloodGlucoseLogs,
   id: string,
@@ -478,6 +946,9 @@ async function deleteOwnLog(
     .where(and(eq(table.id, id), eq(table.userId, user.id)));
 
   revalidatePath(path);
+  if (path === "/movement") {
+    revalidatePath("/exercise");
+  }
   revalidatePath("/dashboard");
 }
 
@@ -532,6 +1003,12 @@ function optionalNumber(formData: FormData, name: string) {
   return parsed;
 }
 
+function optionalPositiveNumber(formData: FormData, name: string) {
+  const value = optionalNumber(formData, name);
+
+  return value !== null && value > 0 ? value : null;
+}
+
 function requiredInteger(formData: FormData, name: string) {
   return Math.round(requiredNumber(formData, name));
 }
@@ -554,6 +1031,14 @@ function actionErrorMessage(error: unknown) {
     return error.message;
   }
 
+  if (
+    error instanceof Error &&
+    (error.message.startsWith("Choose ") ||
+      error.message.startsWith("Profile picture must"))
+  ) {
+    return error.message;
+  }
+
   return "Save failed. Please try again.";
 }
 
@@ -571,4 +1056,22 @@ function logActionError(message: string, error: unknown) {
   }
 
   console.error(message, { error: String(error) });
+}
+
+function safeReturnTo(formData: FormData, fallback: string) {
+  const value = optionalString(formData, "returnTo");
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return fallback;
+  }
+
+  try {
+    const url = new URL(value, "http://homeplate.local");
+    const allowed =
+      allowedReturnPathnames.has(url.pathname) ||
+      allowedReturnPathPrefixes.some((prefix) => url.pathname.startsWith(prefix));
+    if (!allowed) return fallback;
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return fallback;
+  }
 }

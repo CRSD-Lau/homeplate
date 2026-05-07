@@ -1,123 +1,157 @@
+import Link from "next/link";
 import { Trash2 } from "lucide-react";
 
 import { deleteWaterLogAction, logWaterAction } from "@/app/actions";
 import { FormMessage } from "@/components/form-message";
-import { PageHeader, Panel } from "@/components/page-header";
+import { TrackingPageShell } from "@/components/tracking/TrackingPageShell";
+import { WaterTracker } from "@/components/tracking/WaterTracker";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { getWaterPageData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
-import { toDateInputValue } from "@/lib/dates";
-import { formatWater } from "@/lib/units";
+import { normalizeDateInputValue } from "@/lib/dates";
+import { calculateWaterProgress } from "@/lib/tracking";
+import { formatNumber, formatWater } from "@/lib/units";
 
 export default async function WaterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ date?: string; error?: string; saved?: string }>;
 }) {
   const user = await requireUser();
+  const params = await searchParams;
+  const selectedDate = normalizeDateInputValue(params.date);
   const { logs, settings } = await getWaterPageData(user.id);
-  const { error, saved } = await searchParams;
-  const quickAdds = getQuickAdds(settings.waterUnit);
+  const todayLogs = logs.filter((log) => log.logDate === selectedDate);
+  const totalMl = todayLogs.reduce((total, log) => total + log.amountMl, 0);
+  const progress = calculateWaterProgress({
+    totalMl,
+    goalMl: settings.dailyWaterGoalMl,
+  });
 
   return (
-    <>
-      <PageHeader
-        title="Water"
-        description="Quick-add or manually log water. Values are stored in millilitres internally."
+    <TrackingPageShell title="Hydration" eyebrow={selectedDate}>
+      <FormMessage
+        error={params.error}
+        saved={params.saved}
+        savedText="Water saved."
       />
 
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <Panel title="Add Water">
-          <FormMessage error={error} saved={saved} savedText="Water saved." />
-          <div className="mb-4 grid grid-cols-3 gap-2">
-            {quickAdds.map((quickAdd) => (
-              <form action={logWaterAction} key={quickAdd.label}>
-                <input type="hidden" name="logDate" value={toDateInputValue()} />
-                <input
-                  type="hidden"
-                  name="entryAmount"
-                  value={quickAdd.amount}
-                />
-                <input
-                  type="hidden"
-                  name="entryUnit"
-                  value={settings.waterUnit}
-                />
-                <button className="secondary-button w-full" type="submit">
-                  {quickAdd.label}
-                </button>
-              </form>
-            ))}
-          </div>
+      <section className="hp-card-lg p-5 text-center">
+        <h2 className="hp-display text-4xl">Hydration</h2>
+        <p className="mt-4 text-4xl font-extrabold text-[var(--brand-teal)]">
+          {progress.filledUnits}/{progress.totalUnits} glasses
+        </p>
+        <p className="mt-2 text-lg font-bold text-[var(--brand-muted)]">
+          {formatWater(totalMl, settings.waterUnit)} of{" "}
+          {formatWater(settings.dailyWaterGoalMl, settings.waterUnit)}
+        </p>
+        <div className="mx-auto mt-5 max-w-md">
+          <ProgressBar
+            value={totalMl}
+            max={settings.dailyWaterGoalMl}
+            color="var(--brand-teal-light)"
+          />
+        </div>
+      </section>
 
-          <form action={logWaterAction} className="space-y-3">
+      <section className="hp-card p-4">
+        <WaterTracker
+          date={selectedDate}
+          totalMl={totalMl}
+          goalMl={settings.dailyWaterGoalMl}
+        />
+        <p className="mt-4 text-center text-sm font-medium text-[var(--brand-muted)]">
+          One glass adds about {formatWater(progress.unitMl, settings.waterUnit)}.
+        </p>
+      </section>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link href="/dashboard" className="primary-button flex items-center justify-center">
+          Done
+        </Link>
+        <Link
+          href="/settings"
+          className="secondary-button flex w-full items-center justify-center"
+        >
+          Edit water goal
+        </Link>
+      </div>
+
+      <section className="hp-card p-4">
+        <h2 className="mb-3 text-xl font-extrabold text-[var(--brand-ink)]">
+          Manual amount
+        </h2>
+        <form action={logWaterAction} className="space-y-3">
+          <input
+            type="hidden"
+            name="returnTo"
+            value={`/water?date=${selectedDate}&saved=1`}
+          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr]">
             <Field label="Date">
               <input
                 name="logDate"
                 type="date"
-                defaultValue={toDateInputValue()}
+                defaultValue={selectedDate}
                 required
                 className="field"
               />
             </Field>
-            <Field label={`Amount (${waterUnitLabel(settings.waterUnit)})`}>
+            <Field label={`Amount (${unitLabel(settings.waterUnit)})`}>
               <input
                 name="entryAmount"
                 type="number"
                 inputMode="decimal"
-                step="0.1"
                 min="0.1"
-                max={
-                  settings.waterUnit === "ml"
-                    ? 10000
-                    : settings.waterUnit === "oz"
-                      ? 350
-                      : 40
-                }
+                step="0.1"
                 required
                 className="field"
               />
               <input name="entryUnit" type="hidden" value={settings.waterUnit} />
             </Field>
-            <Field label="Notes">
-              <textarea name="notes" rows={2} className="field min-h-20" />
-            </Field>
-            <button type="submit" className="primary-button">
-              Save water
-            </button>
-          </form>
-        </Panel>
+          </div>
+          <Field label="Notes">
+            <textarea name="notes" rows={2} className="field min-h-20" />
+          </Field>
+          <button type="submit" className="primary-button">
+            Save water
+          </button>
+        </form>
+      </section>
 
-        <Panel title="History">
-          {logs.length === 0 ? (
-            <p className="text-sm text-slate-500">No water logs yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {logs.map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"
-                >
-                  <div>
-                    <p className="font-medium">
-                      {formatWater(log.amountMl, settings.waterUnit)}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {log.logDate} · entered {log.entryAmount} {log.entryUnit}
-                    </p>
-                  </div>
-                  <form action={deleteWaterLogAction}>
-                    <input type="hidden" name="id" value={log.id} />
-                    <button className="icon-button" type="submit" title="Delete water log">
-                      <Trash2 aria-hidden="true" size={16} />
-                    </button>
-                  </form>
+      <section className="hp-card p-4">
+        <h2 className="mb-3 text-xl font-extrabold text-[var(--brand-ink)]">
+          Today’s water logs
+        </h2>
+        {todayLogs.length === 0 ? (
+          <p className="text-sm font-medium text-[var(--brand-muted)]">
+            No water logged for this date yet.
+          </p>
+        ) : (
+          <div className="divide-y divide-[var(--brand-line)]">
+            {todayLogs.map((log) => (
+              <div key={log.id} className="flex items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="font-extrabold text-[var(--brand-ink)]">
+                    {formatWater(log.amountMl, settings.waterUnit)}
+                  </p>
+                  <p className="text-sm font-medium text-[var(--brand-muted)]">
+                    Entered {formatNumber(log.entryAmount, 1)} {unitLabel(log.entryUnit)}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
-    </>
+                <form action={deleteWaterLogAction}>
+                  <input type="hidden" name="id" value={log.id} />
+                  <button type="submit" className="icon-button" title="Delete water">
+                    <Trash2 aria-hidden="true" size={17} />
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+    </TrackingPageShell>
   );
 }
 
@@ -130,38 +164,12 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-        {label}
-      </span>
+      <span className="text-sm font-bold text-[var(--brand-ink)]">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
   );
 }
 
-function getQuickAdds(unit: "ml" | "oz" | "cups") {
-  if (unit === "oz") {
-    return [
-      { amount: 8, label: "8 oz" },
-      { amount: 16, label: "16 oz" },
-      { amount: 24, label: "24 oz" },
-    ];
-  }
-
-  if (unit === "cups") {
-    return [
-      { amount: 1, label: "1 cup" },
-      { amount: 2, label: "2 cups" },
-      { amount: 3, label: "3 cups" },
-    ];
-  }
-
-  return [
-    { amount: 250, label: "250 ml" },
-    { amount: 500, label: "500 ml" },
-    { amount: 750, label: "750 ml" },
-  ];
-}
-
-function waterUnitLabel(unit: "ml" | "oz" | "cups") {
-  return unit === "cups" ? "cups" : unit;
+function unitLabel(unit: "ml" | "oz" | "cups") {
+  return unit === "oz" ? "fl oz" : unit;
 }

@@ -44,10 +44,14 @@ export const confidenceStatusEnum = pgEnum("confidence_status", [
 ]);
 export const mealTypeEnum = pgEnum("meal_type", [
   "breakfast",
+  "morning_snack",
   "lunch",
+  "afternoon_snack",
   "dinner",
+  "evening_snack",
   "snack",
 ]);
+export const stepSourceEnum = pgEnum("step_source", ["manual"]);
 export const glucoseContextEnum = pgEnum("glucose_context", [
   "fasting",
   "before_meal",
@@ -113,6 +117,7 @@ export const userProfiles = pgTable(
     heightCm: doublePrecision("height_cm"),
     heightEntryValue: doublePrecision("height_entry_value"),
     heightEntryUnit: heightUnitEnum("height_entry_unit"),
+    goalWeightKg: doublePrecision("goal_weight_kg"),
     ...timestamps,
   },
   (table) => [uniqueIndex("user_profiles_user_id_unique").on(table.userId)],
@@ -367,6 +372,25 @@ export const exerciseLogs = pgTable(
   (table) => [
     index("exercise_logs_user_date_idx").on(table.userId, table.logDate),
   ],
+);
+
+export const stepLogs = pgTable(
+  "step_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    loggedAt: timestamp("logged_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    logDate: date("log_date").notNull(),
+    steps: integer("steps").notNull(),
+    source: stepSourceEnum("source").default("manual").notNull(),
+    notes: text("notes"),
+    ...timestamps,
+  },
+  (table) => [index("step_logs_user_date_idx").on(table.userId, table.logDate)],
 );
 
 export const bloodPressureLogs = pgTable(

@@ -3,13 +3,39 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #f7faf8;
-  --foreground: #0f172a;
+  --brand-teal: #007c80;
+  --brand-teal-light: #6fc8c1;
+  --brand-coral: #ff5546;
+  --brand-green: #78a22f;
+  --brand-yellow: #f6c600;
+  --brand-cream: #f7f4ee;
+  --brand-card: #ffffff;
+  --brand-ink: #171717;
+  --brand-muted: #6e6e6e;
+  --brand-line: #e8e4dc;
+  --brand-soft: #efebe4;
+  --brand-shadow: 0 12px 28px rgba(23, 23, 23, 0.08);
+  --brand-shadow-soft: 0 8px 20px rgba(23, 23, 23, 0.06);
+  --background: var(--brand-cream);
+  --foreground: var(--brand-ink);
 }
 
 .dark {
-  --background: #020617;
-  --foreground: #f8fafc;
+  --brand-teal: #42c7c0;
+  --brand-teal-light: #42c7c0;
+  --brand-coral: #ff6658;
+  --brand-green: #8fbf3d;
+  --brand-yellow: #ffd336;
+  --brand-cream: #101312;
+  --brand-card: #1b1f1e;
+  --brand-ink: #f6f3ec;
+  --brand-muted: #b8b1a7;
+  --brand-line: #35312c;
+  --brand-soft: #232827;
+  --brand-shadow: 0 16px 34px rgba(0, 0, 0, 0.42);
+  --brand-shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.32);
+  --background: var(--brand-cream);
+  --foreground: var(--brand-ink);
   color-scheme: dark;
 }
 
@@ -34,111 +60,153 @@ textarea {
 }
 
 @layer components {
+  .hp-card {
+    min-width: 0;
+    border-radius: 1.25rem;
+    border: 1px solid var(--brand-line);
+    background: var(--brand-card);
+    box-shadow: var(--brand-shadow-soft);
+  }
+
+  .hp-card-lg {
+    border-radius: 1.5rem;
+    border: 1px solid var(--brand-line);
+    background: var(--brand-card);
+    box-shadow: var(--brand-shadow);
+  }
+
+  .hp-icon-chip {
+    display: inline-flex;
+    height: 2.75rem;
+    width: 2.75rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    color: white;
+  }
+
+  .hp-display {
+    color: var(--brand-ink);
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+
+  .hp-muted {
+    color: var(--brand-muted);
+  }
+
   .field {
     min-height: 3rem;
     width: 100%;
-    border-radius: 0.5rem;
-    border: 1px solid #cbd5e1;
-    background: white;
+    border-radius: 0.875rem;
+    border: 1px solid var(--brand-line);
+    background: var(--brand-card);
     padding: 0.625rem 0.75rem;
-    color: #0f172a;
+    color: var(--brand-ink);
     outline: none;
   }
 
   .dark .field {
-    border-color: #475569;
-    background: #0f172a;
-    color: #f8fafc;
+    border-color: var(--brand-line);
+    background: #141817;
+    color: var(--brand-ink);
   }
 
   .field:focus {
-    border-color: #256f5b;
-    box-shadow: 0 0 0 3px rgba(37, 111, 91, 0.12);
+    border-color: var(--brand-teal);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-teal) 18%, transparent);
   }
 
   .dark .field:focus {
-    border-color: #34d399;
-    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16);
+    border-color: var(--brand-teal);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-teal) 22%, transparent);
   }
 
   .primary-button {
     min-height: 3rem;
     width: 100%;
-    border-radius: 0.5rem;
-    background: #256f5b;
+    border-radius: 9999px;
+    background: var(--brand-teal);
     padding: 0.625rem 1rem;
     font-weight: 650;
     color: white;
+    touch-action: manipulation;
     transition: background 160ms ease;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .primary-button:hover {
-    background: #1f5f4e;
+    filter: brightness(0.94);
   }
 
   .secondary-button {
     min-height: 2.75rem;
-    border-radius: 0.5rem;
-    border: 1px solid #cbd5e1;
-    background: white;
+    border-radius: 9999px;
+    border: 1px solid var(--brand-line);
+    background: var(--brand-card);
     padding: 0.5rem 0.875rem;
     font-weight: 600;
-    color: #334155;
+    color: var(--brand-ink);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .dark .secondary-button {
-    border-color: #475569;
-    background: #0f172a;
-    color: #e2e8f0;
+    border-color: var(--brand-line);
+    background: #141817;
+    color: var(--brand-ink);
   }
 
   .dark .secondary-button:hover {
-    background: #1e293b;
+    background: var(--brand-soft);
   }
 
   .icon-button {
     display: inline-flex;
-    height: 2.5rem;
-    width: 2.5rem;
+    height: 2.75rem;
+    width: 2.75rem;
     align-items: center;
     justify-content: center;
-    border-radius: 0.5rem;
-    border: 1px solid #e2e8f0;
-    background: white;
-    color: #64748b;
+    border-radius: 0.875rem;
+    border: 1px solid var(--brand-line);
+    background: var(--brand-card);
+    color: var(--brand-muted);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .dark .icon-button {
-    border-color: #334155;
-    background: #0f172a;
-    color: #cbd5e1;
+    border-color: var(--brand-line);
+    background: #141817;
+    color: var(--brand-muted);
   }
 
   .icon-button:hover {
-    background: #f8fafc;
-    color: #dc2626;
+    background: var(--brand-soft);
+    color: var(--brand-coral);
   }
 
   .dark .icon-button:hover {
-    background: #1e293b;
-    color: #fca5a5;
+    background: var(--brand-soft);
+    color: var(--brand-coral);
   }
 
   .dark .text-slate-950 {
-    color: #f8fafc;
+    color: var(--brand-ink);
   }
 
   .dark .text-slate-700,
   .dark .text-slate-600 {
-    color: #cbd5e1;
+    color: var(--brand-muted);
   }
 
   .dark .text-slate-500 {
-    color: #94a3b8;
+    color: var(--brand-muted);
   }
 
   .dark .border-slate-200,
   .dark .border-slate-100 {
-    border-color: #334155;
+    border-color: var(--brand-line);
   }
 }

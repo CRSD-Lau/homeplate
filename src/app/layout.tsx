@@ -43,7 +43,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#256f5b",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F7F4EE" },
+    { media: "(prefers-color-scheme: dark)", color: "#101312" },
+  ],
 };
 
 export default async function RootLayout({
@@ -65,6 +68,11 @@ export default async function RootLayout({
         data-theme={theme}
         className={`flex min-h-full flex-col antialiased ${darkClass}`}
       >
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(()=>{try{const m=document.cookie.match(/(?:^|; )homeplate_theme=([^;]+)/);const v=m?decodeURIComponent(m[1]):'light';const t=v==='dark'?'dark':'light';const d=t==='dark';document.documentElement.classList.toggle('dark',d);document.body?.classList.toggle('dark',d);document.documentElement.dataset.theme=t;document.body&&(document.body.dataset.theme=t);}catch{}})();`,
+          }}
+        />
         {children}
       </body>
     </html>

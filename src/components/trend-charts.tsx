@@ -89,7 +89,7 @@ export function TrendCharts({ data }: { data: TrendPoint[] }) {
         </ResponsiveContainer>
       </ChartPanel>
 
-      <ChartPanel title="Exercise">
+      <ChartPanel title="Movement">
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={compactData}>
             <CartesianGrid vertical={false} stroke="#e2e8f0" />

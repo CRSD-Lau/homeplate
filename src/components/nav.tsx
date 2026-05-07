@@ -24,7 +24,7 @@ const primaryNav = [
 const secondaryNav = [
   { href: "/weight", label: "Weight", icon: Weight },
   { href: "/water", label: "Water", icon: Droplets },
-  { href: "/exercise", label: "Exercise", icon: Activity },
+  { href: "/movement", label: "Movement", icon: Activity },
 ];
 
 export function DesktopNav({ isAdmin }: { isAdmin: boolean }) {

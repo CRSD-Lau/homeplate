@@ -3,198 +3,226 @@ import {
   Apple,
   Droplets,
   Dumbbell,
-  Flame,
   HeartPulse,
-  Plus,
-  Salad,
-  Timer,
+  Settings,
+  Utensils,
   Weight,
 } from "lucide-react";
 
-import { PageHeader, Panel, StatCard } from "@/components/page-header";
-import { TrendCharts } from "@/components/trend-charts";
+import { DayStrip } from "@/components/app/DayStrip";
+import { ActionCard } from "@/components/ui/ActionCard";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SectionHeading } from "@/components/ui/SectionHeading";
 import { getDashboardData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
+import { normalizeDateInputValue, parseDateInputValue } from "@/lib/dates";
 import {
   formatGlucose,
-  formatHeight,
   formatNumber,
   formatWater,
   formatWeight,
 } from "@/lib/units";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const user = await requireUser();
-  const data = await getDashboardData(user.id);
-
+  const { date } = await searchParams;
+  const selectedDate = normalizeDateInputValue(date);
+  const data = await getDashboardData(user.id, selectedDate);
+  const selectedDay = parseDateInputValue(data.today);
+  const calorieTarget = data.dashboardPreferences.calorieTarget;
+  const caloriesRemaining = calorieTarget
+    ? Math.max(0, calorieTarget - data.nutrition.calories)
+    : null;
+  const caloriePercent = calorieTarget
+    ? Math.round((data.nutrition.calories / calorieTarget) * 100)
+    : null;
   const waterPercent = Math.min(
     100,
     Math.round((data.waterTotalMl / data.settings.dailyWaterGoalMl) * 100),
   );
+  const selectedWeight = data.selectedWeight ?? null;
 
   return (
-    <>
-      <PageHeader
-        title="Dashboard"
-        description="Today at a glance, with simple trends over the last 30 days."
+    <div className="space-y-5">
+      <DayStrip
+        selectedDate={data.today}
+        loggedDates={data.loggedDates}
+        basePath="/dashboard"
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Calories"
-          value={formatNumber(data.nutrition.calories, 0)}
-          detail={`${formatNumber(data.nutrition.proteinG, 0)}g protein`}
-        />
-        <StatCard
-          label="Water"
-          value={formatWater(data.waterTotalMl, data.settings.waterUnit)}
-          detail={`${waterPercent}% of daily goal`}
-        />
-        <StatCard
-          label="Latest Weight"
-          value={
-            data.latestWeight
-              ? formatWeight(data.latestWeight.weightKg, data.settings.weightUnit)
-              : "-"
-          }
-          detail={data.bmi ? `BMI ${formatNumber(data.bmi, 1)}` : "Add height and weight"}
-        />
-        <StatCard
-          label="Exercise"
-          value={`${data.exerciseDurationMinutes} min`}
-          detail={`${data.exerciseCalories} calories logged`}
-        />
-      </div>
-
-      <Panel title="Quick Log" className="mt-5">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <QuickAction href="/log" icon={Salad} label="Food" />
-          <QuickAction href="/water" icon={Droplets} label="Water" />
-          <QuickAction href="/weight" icon={Weight} label="Weight" />
-          <QuickAction href="/exercise" icon={Dumbbell} label="Exercise" />
-          <QuickAction href="/health" icon={HeartPulse} label="Health" />
-          <QuickAction href="/foods" icon={Apple} label="Foods" />
+      <section className="hp-card-lg p-5">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="hp-icon-chip bg-[var(--brand-teal)]">
+              <Utensils aria-hidden="true" size={22} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-lg font-extrabold tracking-normal text-[var(--brand-ink)]">
+                Daily progress
+              </p>
+              <p className="text-sm font-medium text-[var(--brand-muted)]">
+                {selectedDay.toLocaleDateString("en-CA", {
+                  weekday: "long",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
+          </div>
+          <Link href="/settings" className="icon-button" aria-label="Open goals">
+            <Settings aria-hidden="true" size={18} />
+          </Link>
         </div>
-      </Panel>
 
-      <section className="mt-5 grid gap-4 lg:grid-cols-3">
-        <Panel title="Nutrition">
-          <Metric icon={Flame} label="Calories" value={data.nutrition.calories} />
-          <Metric icon={Salad} label="Carbs" value={data.nutrition.carbsG} suffix="g" />
-          <Metric icon={Salad} label="Protein" value={data.nutrition.proteinG} suffix="g" />
-          <Metric icon={Salad} label="Fat" value={data.nutrition.fatG} suffix="g" />
-          <Metric icon={Salad} label="Fibre" value={data.nutrition.fibreG ?? 0} suffix="g" />
-          <Metric icon={Salad} label="Sugar" value={data.nutrition.sugarG ?? 0} suffix="g" />
-          <Metric
-            icon={Salad}
-            label="Sodium"
-            value={data.nutrition.sodiumMg ?? 0}
-            suffix="mg"
-          />
-        </Panel>
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-[var(--brand-ink)]">Calories</p>
+            <p className="text-4xl font-extrabold tracking-normal text-[var(--brand-ink)]">
+              {formatNumber(data.nutrition.calories, 0)}
+            </p>
+            <p className="text-sm font-medium text-[var(--brand-muted)]">
+              {calorieTarget
+                ? `of ${formatNumber(calorieTarget, 0)} cal`
+                : "Set a target in Settings"}
+            </p>
+          </div>
+          {caloriePercent !== null ? (
+            <div className="text-right">
+              <p className="text-2xl font-extrabold text-[var(--brand-ink)]">
+                {formatNumber(caloriePercent, 0)}%
+              </p>
+              <p className="text-sm font-medium text-[var(--brand-muted)]">
+                of target
+              </p>
+            </div>
+          ) : null}
+        </div>
 
-        <Panel title="Body and Water">
-          <Metric icon={Droplets} label="Water goal" value={waterPercent} suffix="%" />
-          <Metric
-            icon={Weight}
-            label="Weight"
-            text={
-              data.latestWeight
-                ? formatWeight(data.latestWeight.weightKg, data.settings.weightUnit)
-              : "-"
-            }
-          />
-          <Metric
-            icon={Weight}
-            label="Height"
-            text={
-              data.profile?.heightCm
-                ? formatHeight(data.profile.heightCm, data.settings.heightUnit)
-                : "-"
-            }
-          />
-          <Metric
-            icon={Weight}
-            label="BMI"
-            text={data.bmi ? formatNumber(data.bmi, 1) : "-"}
-          />
-        </Panel>
+        <ProgressBar
+          value={data.nutrition.calories}
+          max={calorieTarget}
+          color="var(--brand-teal)"
+        />
+        <p className="mt-2 text-sm font-medium text-[var(--brand-muted)]">
+          {caloriesRemaining !== null
+            ? `${formatNumber(caloriesRemaining, 0)} cal remaining`
+            : "Add optional calorie and macro targets to unlock progress rings."}
+        </p>
 
-        <Panel title="Health Logs">
-          <Metric icon={Timer} label="Exercise" value={data.exerciseDurationMinutes} suffix="min" />
-          <Metric
-            icon={HeartPulse}
-            label="Blood pressure"
-            text={
-              data.latestBloodPressure
-                ? `${data.latestBloodPressure.systolicMmhg}/${data.latestBloodPressure.diastolicMmhg} mmHg`
-                : "-"
-            }
+        <div className="mt-4 grid grid-cols-3 divide-x divide-[var(--brand-line)] rounded-2xl border border-[var(--brand-line)] p-3">
+          <MacroPanel
+            label="Protein"
+            value={data.nutrition.proteinG}
+            target={data.dashboardPreferences.macroTargets.proteinG}
+            color="var(--brand-teal)"
           />
-          <Metric
-            icon={HeartPulse}
-            label="Blood glucose"
-            text={
-              data.latestBloodGlucose
-                ? formatGlucose(
-                    data.latestBloodGlucose.glucoseMmolL,
-                    data.settings.bloodGlucoseUnit,
-                  )
-                : "-"
-            }
+          <MacroPanel
+            label="Carbs"
+            value={data.nutrition.carbsG}
+            target={data.dashboardPreferences.macroTargets.carbsG}
+            color="var(--brand-yellow)"
           />
-        </Panel>
+          <MacroPanel
+            label="Fat"
+            value={data.nutrition.fatG}
+            target={data.dashboardPreferences.macroTargets.fatG}
+            color="var(--brand-coral)"
+          />
+        </div>
       </section>
 
-      <div className="mt-5">
-        <TrendCharts data={data.trends} />
-      </div>
-    </>
+      <section>
+        <SectionHeading title="Today’s progress" />
+        <div className="space-y-3">
+          <ActionCard
+            href={`/log?date=${data.today}`}
+            icon={Apple}
+            title="Log your meals"
+            subtitle={`${data.mealCount} meal${data.mealCount === 1 ? "" : "s"} logged today`}
+            color="var(--brand-teal)"
+          />
+          <ActionCard
+            href="/weight"
+            icon={Weight}
+            title={selectedWeight ? "Weight logged" : "Log weight"}
+            subtitle={
+              selectedWeight
+                ? `${formatWeight(selectedWeight.weightKg, data.settings.weightUnit)} · Today`
+                : data.latestWeight
+                  ? `Latest ${formatWeight(data.latestWeight.weightKg, data.settings.weightUnit)}`
+                  : "Add your first weight entry"
+            }
+            color="var(--brand-green)"
+          />
+          <ActionCard
+            href="/water"
+            icon={Droplets}
+            title="Stay hydrated"
+            subtitle={`${formatWater(data.waterTotalMl, data.settings.waterUnit)} of ${formatWater(
+              data.settings.dailyWaterGoalMl,
+              data.settings.waterUnit,
+            )} · ${waterPercent}%`}
+            color="var(--brand-teal-light)"
+            progress={{
+              value: data.waterTotalMl,
+              max: data.settings.dailyWaterGoalMl,
+              color: "var(--brand-teal-light)",
+            }}
+          />
+          <ActionCard
+            href="/movement"
+            icon={Dumbbell}
+            title="Movement"
+            subtitle={`${data.exerciseDurationMinutes} min · ${data.exerciseCalories} cal`}
+            color="var(--brand-yellow)"
+          />
+          <ActionCard
+            href="/health"
+            icon={HeartPulse}
+            title="Health check"
+            subtitle={`${data.latestBloodPressure ? `BP ${data.latestBloodPressure.systolicMmhg} / ${data.latestBloodPressure.diastolicMmhg}` : "No BP yet"} · ${
+              data.latestBloodGlucose
+                ? `Glucose ${formatGlucose(
+                    data.latestBloodGlucose.glucoseMmolL,
+                    data.settings.bloodGlucoseUnit,
+                  )}`
+                : "No glucose yet"
+            }`}
+            color="var(--brand-coral)"
+          />
+        </div>
+      </section>
+    </div>
   );
 }
 
-function QuickAction({
-  href,
-  icon: Icon,
-  label,
-}: {
-  href: string;
-  icon: typeof Plus;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-center text-sm font-semibold text-slate-800 transition hover:border-emerald-300 hover:bg-emerald-50 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-100 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/40"
-    >
-      <Icon aria-hidden="true" size={20} />
-      <span>{label}</span>
-    </Link>
-  );
-}
-
-function Metric({
-  icon: Icon,
+function MacroPanel({
   label,
   value,
-  suffix = "",
-  text,
+  target,
+  color,
 }: {
-  icon: typeof Flame;
   label: string;
-  value?: number;
-  suffix?: string;
-  text?: string;
+  value: number;
+  target: number | null;
+  color: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0 dark:border-slate-800">
-      <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-        <Icon aria-hidden="true" size={16} />
-        <span>{label}</span>
+    <div className="min-w-0 px-3 first:pl-0 last:pr-0">
+      <p className="text-sm font-bold text-[var(--brand-ink)]">{label}</p>
+      <p className="mt-1 text-xl font-extrabold tracking-normal text-[var(--brand-ink)]">
+        {formatNumber(value, 0)}g
+      </p>
+      <p className="text-xs font-medium text-[var(--brand-muted)]">
+        {target ? `of ${formatNumber(target, 0)}g` : "no target"}
+      </p>
+      <div className="mt-2">
+        <ProgressBar value={value} max={target} color={color} />
       </div>
-      <span className="font-medium text-slate-950 dark:text-slate-50">
-        {text ?? `${formatNumber(value ?? 0, suffix === "%" ? 0 : 1)}${suffix}`}
-      </span>
     </div>
   );
 }

@@ -9,7 +9,10 @@ import {
   foodLogs,
   foodNutrientValues,
   foods,
+  savedMealItems,
+  savedMeals,
   servings,
+  stepLogs,
   userProfiles,
   userSettings,
   users,
@@ -17,8 +20,19 @@ import {
   weightLogs,
 } from "@/db/schema";
 import { calculateBmi } from "@/lib/bmi";
-import { recentDateKeys, toDateInputValue } from "@/lib/dates";
+import {
+  normalizeDateInputValue,
+  recentDateKeys,
+  toDateInputValue,
+} from "@/lib/dates";
+import { parseDashboardPreferences } from "@/lib/dashboard-preferences";
 import { sumNutrients } from "@/lib/nutrition";
+import {
+  calculateMealTotals,
+  calculateSavedMealTotals,
+  calculateStepTotal,
+  normalizeMealType,
+} from "@/lib/tracking";
 
 export async function getProfileAndSettings(userId: string) {
   const db = getDb();
@@ -61,6 +75,7 @@ export async function getSettingsPageData(userId: string) {
   return {
     profile,
     settings,
+    dashboardPreferences: parseDashboardPreferences(settings.dashboardPreferences),
     startingWeight: startingWeight[0] ?? null,
     latestWeight: latestWeight[0] ?? null,
   };
@@ -92,14 +107,21 @@ export async function getFoodOptions() {
     .orderBy(asc(foods.name));
 }
 
-export async function getFoodsPageData() {
-  return getDb()
+export async function getFoodsPageData({
+  query = "",
+  source = "all",
+}: {
+  query?: string;
+  source?: "all" | "manual" | "verified" | "provisional";
+} = {}) {
+  const rows = await getDb()
     .select({
       foodId: foods.id,
       name: foods.name,
       brand: foods.brand,
       foodType: foods.foodType,
       confidenceStatus: foods.confidenceStatus,
+      servingId: servings.id,
       servingLabel: servings.label,
       grams: servings.grams,
       millilitres: servings.millilitres,
@@ -121,19 +143,162 @@ export async function getFoodsPageData() {
       eq(foodNutrientValues.servingId, servings.id),
     )
     .orderBy(asc(foods.name));
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return rows.filter((food) => {
+    const matchesQuery =
+      !normalizedQuery ||
+      food.name.toLowerCase().includes(normalizedQuery) ||
+      (food.brand?.toLowerCase().includes(normalizedQuery) ?? false);
+
+    if (!matchesQuery) return false;
+
+    if (source === "manual") {
+      return food.foodType === "manual" || food.confidenceStatus === "manual";
+    }
+
+    if (source === "verified") {
+      return (
+        food.confidenceStatus === "verified" ||
+        food.confidenceStatus === "imported"
+      );
+    }
+
+    if (source === "provisional") {
+      return (
+        food.confidenceStatus === "provisional" ||
+        food.confidenceStatus === "ocr_draft"
+      );
+    }
+
+    return true;
+  });
 }
 
-export async function getFoodLogPageData(userId: string, date = toDateInputValue()) {
-  const [foodOptions, logs] = await Promise.all([
+export async function getFoodLogPageData(
+  userId: string,
+  date = toDateInputValue(),
+) {
+  const selectedDate = normalizeDateInputValue(date);
+  const [foodOptions, logs, recentRows] = await Promise.all([
     getFoodOptions(),
     getDb()
       .select()
       .from(foodLogs)
-      .where(and(eq(foodLogs.userId, userId), eq(foodLogs.logDate, date)))
+      .where(and(eq(foodLogs.userId, userId), eq(foodLogs.logDate, selectedDate)))
       .orderBy(asc(foodLogs.mealType), desc(foodLogs.loggedAt)),
+    getDb()
+      .select({
+        foodId: foodLogs.foodId,
+        servingId: foodLogs.servingId,
+        foodName: foodLogs.foodNameSnapshot,
+        servingLabel: foodLogs.servingLabelSnapshot,
+        calories: foodLogs.caloriesSnapshot,
+        proteinG: foodLogs.proteinGSnapshot,
+        carbsG: foodLogs.carbsGSnapshot,
+        fatG: foodLogs.fatGSnapshot,
+      })
+      .from(foodLogs)
+      .where(eq(foodLogs.userId, userId))
+      .orderBy(desc(foodLogs.loggedAt))
+      .limit(50),
   ]);
 
-  return { date, foodOptions, logs };
+  const seen = new Set<string>();
+  const recentFoods = recentRows
+    .filter((row) => row.foodId && row.servingId)
+    .filter((row) => {
+      const key = `${row.foodId}|${row.servingId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 8);
+  const mealTotals = calculateMealTotals(
+    logs.map((log) => ({
+      mealType: log.mealType,
+      calories: log.caloriesSnapshot,
+      proteinG: log.proteinGSnapshot,
+      carbsG: log.carbsGSnapshot,
+      fatG: log.fatGSnapshot,
+      fibreG: log.fibreGSnapshot,
+      sugarG: log.sugarGSnapshot,
+      sodiumMg: log.sodiumMgSnapshot,
+    })),
+  );
+
+  return {
+    date: selectedDate,
+    foodOptions,
+    logs,
+    mealTotals,
+    nutrition: mealTotals.daily,
+    recentFoods,
+  };
+}
+
+export async function getMealReviewPageData(
+  userId: string,
+  mealType: string,
+  date = toDateInputValue(),
+) {
+  const selectedDate = normalizeDateInputValue(date);
+  const selectedMeal = normalizeMealType(mealType);
+  const logs = await getDb()
+    .select()
+    .from(foodLogs)
+    .where(
+      and(
+        eq(foodLogs.userId, userId),
+        eq(foodLogs.logDate, selectedDate),
+        eq(foodLogs.mealType, selectedMeal),
+      ),
+    )
+    .orderBy(desc(foodLogs.loggedAt));
+
+  return {
+    date: selectedDate,
+    mealType: selectedMeal,
+    logs,
+    nutrition: sumNutrients(
+      logs.map((log) => ({
+        calories: log.caloriesSnapshot,
+        proteinG: log.proteinGSnapshot,
+        carbsG: log.carbsGSnapshot,
+        fatG: log.fatGSnapshot,
+        fibreG: log.fibreGSnapshot,
+        sugarG: log.sugarGSnapshot,
+        sodiumMg: log.sodiumMgSnapshot,
+      })),
+    ),
+  };
+}
+
+export async function getFoodAddPageData({
+  userId,
+  mealType,
+  date = toDateInputValue(),
+  query = "",
+}: {
+  userId: string;
+  mealType: string;
+  date?: string;
+  query?: string;
+}) {
+  const selectedDate = normalizeDateInputValue(date);
+  const selectedMeal = normalizeMealType(mealType);
+  const [foodOptions, savedMealRows] = await Promise.all([
+    getFoodsPageData({ query, source: "all" }),
+    getSavedMealsWithItems(userId),
+  ]);
+
+  return {
+    date: selectedDate,
+    mealType: selectedMeal,
+    foodOptions,
+    savedMeals: savedMealRows,
+  };
 }
 
 export async function getWeightPageData(userId: string) {
@@ -171,9 +336,61 @@ export async function getExercisePageData(userId: string) {
   return { logs };
 }
 
+export async function getMovementPageData(
+  userId: string,
+  date = toDateInputValue(),
+) {
+  const selectedDate = normalizeDateInputValue(date);
+  const [exerciseRows, stepRows] = await Promise.all([
+    getDb()
+      .select()
+      .from(exerciseLogs)
+      .where(eq(exerciseLogs.userId, userId))
+      .orderBy(desc(exerciseLogs.loggedAt))
+      .limit(80),
+    getDb()
+      .select()
+      .from(stepLogs)
+      .where(eq(stepLogs.userId, userId))
+      .orderBy(desc(stepLogs.loggedAt))
+      .limit(80),
+  ]);
+  const todayExercises = exerciseRows.filter((row) => row.logDate === selectedDate);
+  const todaySteps = stepRows.filter((row) => row.logDate === selectedDate);
+
+  return {
+    date: selectedDate,
+    logs: exerciseRows,
+    stepLogs: stepRows,
+    todayExercises,
+    todaySteps,
+    totals: {
+      sessions: todayExercises.length,
+      durationMinutes: todayExercises.reduce(
+        (total, row) => total + (row.durationMinutes ?? 0),
+        0,
+      ),
+      caloriesBurned: todayExercises.reduce(
+        (total, row) => total + (row.caloriesBurned ?? 0),
+        0,
+      ),
+      steps: calculateStepTotal(todaySteps),
+    },
+  };
+}
+
 export async function getHealthPageData(userId: string) {
-  const { settings } = await getProfileAndSettings(userId);
-  const [bloodPressure, bloodGlucose] = await Promise.all([
+  const { profile, settings } = await getProfileAndSettings(userId);
+  const weekStart = recentDateKeys(7)[0];
+  const [
+    bloodPressure,
+    bloodGlucose,
+    weightRows,
+    waterRows,
+    exerciseRows,
+    foodRows,
+    trends,
+  ] = await Promise.all([
     getDb()
       .select()
       .from(bloodPressureLogs)
@@ -186,19 +403,65 @@ export async function getHealthPageData(userId: string) {
       .where(eq(bloodGlucoseLogs.userId, userId))
       .orderBy(desc(bloodGlucoseLogs.loggedAt))
       .limit(60),
+    getDb()
+      .select()
+      .from(weightLogs)
+      .where(and(eq(weightLogs.userId, userId), gte(weightLogs.logDate, weekStart))),
+    getDb()
+      .select()
+      .from(waterLogs)
+      .where(and(eq(waterLogs.userId, userId), gte(waterLogs.logDate, weekStart))),
+    getDb()
+      .select()
+      .from(exerciseLogs)
+      .where(
+        and(eq(exerciseLogs.userId, userId), gte(exerciseLogs.logDate, weekStart)),
+      ),
+    getDb()
+      .select()
+      .from(foodLogs)
+      .where(and(eq(foodLogs.userId, userId), gte(foodLogs.logDate, weekStart))),
+    getTrendData(userId, profile?.heightCm ?? null),
   ]);
 
-  return { bloodPressure, bloodGlucose, settings };
+  const mealCounts = new Map<string, number>();
+  for (const log of foodRows) {
+    mealCounts.set(log.mealType, (mealCounts.get(log.mealType) ?? 0) + 1);
+  }
+  const mostConsistentMeal =
+    Array.from(mealCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ??
+    null;
+
+  return {
+    profile,
+    bloodPressure,
+    bloodGlucose,
+    settings,
+    trends,
+    insights: {
+      weightEntries: weightRows.length,
+      averageDailyWaterMl:
+        waterRows.reduce((total, row) => total + row.amountMl, 0) / 7,
+      mostConsistentMeal,
+      exerciseDays: new Set(exerciseRows.map((row) => row.logDate)).size,
+      bloodPressureEntries: bloodPressure.filter(
+        (row) => row.logDate >= weekStart,
+      ).length,
+      bloodGlucoseEntries: bloodGlucose.filter((row) => row.logDate >= weekStart)
+        .length,
+    },
+  };
 }
 
-export async function getDashboardData(userId: string) {
-  const today = toDateInputValue();
+export async function getDashboardData(userId: string, date = toDateInputValue()) {
+  const selectedDate = normalizeDateInputValue(date);
   const { profile, settings } = await getProfileAndSettings(userId);
 
   const [
     todayFoodLogs,
     todayWaterLogs,
     latestWeight,
+    selectedWeight,
     todayExerciseLogs,
     latestBloodPressure,
     latestBloodGlucose,
@@ -207,11 +470,11 @@ export async function getDashboardData(userId: string) {
     getDb()
       .select()
       .from(foodLogs)
-      .where(and(eq(foodLogs.userId, userId), eq(foodLogs.logDate, today))),
+      .where(and(eq(foodLogs.userId, userId), eq(foodLogs.logDate, selectedDate))),
     getDb()
       .select()
       .from(waterLogs)
-      .where(and(eq(waterLogs.userId, userId), eq(waterLogs.logDate, today))),
+      .where(and(eq(waterLogs.userId, userId), eq(waterLogs.logDate, selectedDate))),
     getDb()
       .select()
       .from(weightLogs)
@@ -220,8 +483,16 @@ export async function getDashboardData(userId: string) {
       .limit(1),
     getDb()
       .select()
+      .from(weightLogs)
+      .where(and(eq(weightLogs.userId, userId), eq(weightLogs.logDate, selectedDate)))
+      .orderBy(desc(weightLogs.loggedAt))
+      .limit(1),
+    getDb()
+      .select()
       .from(exerciseLogs)
-      .where(and(eq(exerciseLogs.userId, userId), eq(exerciseLogs.logDate, today))),
+      .where(
+        and(eq(exerciseLogs.userId, userId), eq(exerciseLogs.logDate, selectedDate)),
+      ),
     getDb()
       .select()
       .from(bloodPressureLogs)
@@ -266,20 +537,35 @@ export async function getDashboardData(userId: string) {
     latestWeightLog && profile?.heightCm
       ? calculateBmi(latestWeightLog.weightKg, profile.heightCm)
       : null;
+  const loggedDates = trends
+    .filter(
+      (day) =>
+        day.calories > 0 ||
+        day.waterMl > 0 ||
+        day.exerciseMinutes > 0 ||
+        day.weightKg !== null ||
+        day.systolic !== null ||
+        day.glucoseMmolL !== null,
+    )
+    .map((day) => day.date);
 
   return {
-    today,
+    today: selectedDate,
     profile,
     settings,
+    dashboardPreferences: parseDashboardPreferences(settings.dashboardPreferences),
     nutrition,
+    mealCount: new Set(todayFoodLogs.map((log) => log.mealType)).size,
     waterTotalMl,
     exerciseDurationMinutes,
     exerciseCalories,
     latestWeight: latestWeightLog,
+    selectedWeight: selectedWeight[0] ?? null,
     bmi,
     latestBloodPressure: latestBloodPressure[0] ?? null,
     latestBloodGlucose: latestBloodGlucose[0] ?? null,
     trends,
+    loggedDates,
   };
 }
 
@@ -405,6 +691,52 @@ export async function getTrendData(userId: string, heightCm: number | null) {
   }
 
   return Array.from(base.values());
+}
+
+export async function getSavedMealsWithItems(userId: string) {
+  const [meals, items] = await Promise.all([
+    getDb()
+      .select()
+      .from(savedMeals)
+      .where(eq(savedMeals.userId, userId))
+      .orderBy(desc(savedMeals.updatedAt)),
+    getDb()
+      .select({
+        savedMealId: savedMealItems.savedMealId,
+        foodId: foods.id,
+        foodName: foods.name,
+        brand: foods.brand,
+        servingId: servings.id,
+        servingLabel: servings.label,
+        quantity: savedMealItems.quantity,
+        calories: foodNutrientValues.calories,
+        proteinG: foodNutrientValues.proteinG,
+        carbsG: foodNutrientValues.carbsG,
+        fatG: foodNutrientValues.fatG,
+        fibreG: foodNutrientValues.fibreG,
+        sugarG: foodNutrientValues.sugarG,
+        sodiumMg: foodNutrientValues.sodiumMg,
+      })
+      .from(savedMealItems)
+      .innerJoin(savedMeals, eq(savedMealItems.savedMealId, savedMeals.id))
+      .innerJoin(foods, eq(savedMealItems.foodId, foods.id))
+      .innerJoin(servings, eq(savedMealItems.servingId, servings.id))
+      .innerJoin(
+        foodNutrientValues,
+        eq(foodNutrientValues.servingId, savedMealItems.servingId),
+      )
+      .where(eq(savedMeals.userId, userId)),
+  ]);
+
+  return meals.map((meal) => {
+    const mealItems = items.filter((item) => item.savedMealId === meal.id);
+    return {
+      ...meal,
+      mealType: meal.mealType ? normalizeMealType(meal.mealType) : null,
+      items: mealItems,
+      totals: calculateSavedMealTotals(mealItems),
+    };
+  });
 }
 
 export async function getAdminData() {

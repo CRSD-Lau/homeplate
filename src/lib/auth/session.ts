@@ -2,11 +2,12 @@ import { randomBytes, createHash } from "node:crypto";
 
 import { addDays } from "date-fns";
 import { and, eq, gt } from "drizzle-orm";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getDb } from "@/db";
 import { sessions, users } from "@/db/schema";
+import { shouldUseSecureCookie } from "@/lib/cookie-security";
 
 export const SESSION_COOKIE_NAME = "homeplate_session";
 const SESSION_DAYS = 180;
@@ -35,10 +36,15 @@ export async function createSession(userId: string) {
   });
 
   const cookieStore = await cookies();
+  const headersList = await headers();
   cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookie({
+      forwardedProto: headersList.get("x-forwarded-proto"),
+      origin: headersList.get("origin"),
+      referer: headersList.get("referer"),
+    }),
     path: "/",
     expires: expiresAt,
     maxAge: SESSION_MAX_AGE_SECONDS,
