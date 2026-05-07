@@ -120,24 +120,26 @@ export default async function AddFoodPage({
           )}
         </section>
       ) : (
-        <section className="hp-card p-4">
+        <>
           {data.foodOptions.length === 0 ? (
             <EmptyState
               title="No foods match your search."
               description="Try a different term or add a manual food in Foods."
             />
           ) : (
-            data.foodOptions.slice(0, 80).map((food) => (
-              <FoodSearchResult
-                key={`${food.foodId}|${food.servingId}`}
-                food={food}
-                date={data.date}
-                mealType={data.mealType}
-                returnTo={returnTo}
-              />
-            ))
+            <section className="hp-card p-4">
+              {data.foodOptions.slice(0, 80).map((food) => (
+                <FoodSearchResult
+                  key={`${food.foodId}|${food.servingId}`}
+                  food={food}
+                  date={data.date}
+                  mealType={data.mealType}
+                  returnTo={returnTo}
+                />
+              ))}
+            </section>
           )}
-        </section>
+        </>
       )}
     </TrackingPageShell>
   );
