@@ -37,8 +37,7 @@ export default async function WaterPage({
       />
 
       <section className="hp-card-lg p-5 text-center">
-        <h2 className="hp-display text-4xl">Hydration</h2>
-        <p className="mt-4 text-4xl font-extrabold text-[var(--brand-teal)]">
+        <p className="text-4xl font-extrabold text-[var(--brand-teal)]">
           {progress.filledUnits}/{progress.totalUnits} glasses
         </p>
         <p className="mt-2 text-lg font-bold text-[var(--brand-muted)]">
