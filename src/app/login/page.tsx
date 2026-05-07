@@ -22,9 +22,7 @@ export default async function LoginPage({
             <Utensils aria-hidden="true" size={22} />
           </span>
           <div>
-            <h1 className="text-2xl font-extrabold tracking-normal text-[var(--brand-ink)]">
-              HomePlate
-            </h1>
+            <h1 className="hp-display text-2xl">HomePlate</h1>
             <p className="text-sm font-medium text-[var(--brand-muted)]">
               Private household login
             </p>
