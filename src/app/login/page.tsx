@@ -15,29 +15,31 @@ export default async function LoginPage({
   const { error } = await searchParams;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f7faf8] px-4 py-10 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-      <section className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4 py-10">
+      <section className="hp-card-lg w-full max-w-sm p-6">
         <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-700 text-white">
-            <Utensils aria-hidden="true" size={24} />
-          </div>
+          <span className="hp-icon-chip bg-[var(--brand-teal)]">
+            <Utensils aria-hidden="true" size={22} />
+          </span>
           <div>
-            <h1 className="text-2xl font-semibold">HomePlate</h1>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+            <h1 className="text-2xl font-extrabold tracking-normal text-[var(--brand-ink)]">
+              HomePlate
+            </h1>
+            <p className="text-sm font-medium text-[var(--brand-muted)]">
               Private household login
             </p>
           </div>
         </div>
 
         {error ? (
-          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="mb-4 rounded-2xl border border-[var(--brand-coral)]/30 bg-[var(--brand-coral)]/10 px-3 py-2 text-sm font-bold text-[var(--brand-coral)]">
             {error}
           </p>
         ) : null}
 
         <form action={loginAction} className="space-y-4">
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Email</span>
+            <span className="text-sm font-bold text-[var(--brand-ink)]">Email</span>
             <input
               name="email"
               type="email"
@@ -48,7 +50,7 @@ export default async function LoginPage({
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">Password</span>
+            <span className="text-sm font-bold text-[var(--brand-ink)]">Password</span>
             <input
               name="password"
               type="password"
@@ -58,15 +60,12 @@ export default async function LoginPage({
             />
           </label>
 
-          <button
-            type="submit"
-            className="primary-button"
-          >
+          <button type="submit" className="primary-button">
             Sign in
           </button>
         </form>
 
-        <p className="mt-5 text-xs leading-5 text-slate-500">
+        <p className="mt-5 text-xs leading-5 text-[var(--brand-muted)]">
           No public registration is available. Accounts are seeded locally for
           Neil and Allison.
         </p>
