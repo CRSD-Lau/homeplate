@@ -5,6 +5,7 @@ import { saveMealAction } from "@/app/actions";
 import { BottomActionBar } from "@/components/tracking/BottomActionBar";
 import { MealReviewItem } from "@/components/tracking/MealReviewItem";
 import { TrackingPageShell } from "@/components/tracking/TrackingPageShell";
+import { FormMessage } from "@/components/form-message";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { getMealReviewPageData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
@@ -36,16 +37,7 @@ export default async function MealReviewPage({
         </span>
       }
     >
-      {query.error ? (
-        <p className="rounded-2xl border border-[var(--brand-coral)]/40 bg-[var(--brand-card)] p-3 text-sm font-bold text-[var(--brand-coral)]">
-          {query.error}
-        </p>
-      ) : null}
-      {query.saved ? (
-        <p className="rounded-2xl border border-[var(--brand-green)]/40 bg-[var(--brand-card)] p-3 text-sm font-bold text-[var(--brand-green)]">
-          Saved.
-        </p>
-      ) : null}
+      <FormMessage error={query.error} saved={query.saved} savedText="Saved." />
 
       <section className="hp-card-lg p-5">
         <div className="mb-4 flex items-start justify-between gap-3">
