@@ -23,13 +23,13 @@ export default async function AdminPage() {
         <Panel title="Manual Source">
           {data.manualSource ? (
             <div>
-              <p className="font-medium">{data.manualSource.name}</p>
-              <p className="mt-1 text-sm text-slate-600">
+              <p className="font-medium text-[var(--brand-ink)]">{data.manualSource.name}</p>
+              <p className="mt-1 text-sm text-[var(--brand-muted)]">
                 {data.manualSource.attribution}
               </p>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[var(--brand-muted)]">
               Manual source will be created when foods are seeded or added.
             </p>
           )}
@@ -37,15 +37,15 @@ export default async function AdminPage() {
 
         <Panel title="Provisional Products">
           {data.provisionalFoods.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[var(--brand-muted)]">
               No provisional barcode products yet.
             </p>
           ) : (
             <ul className="space-y-2">
               {data.provisionalFoods.map((food) => (
-                <li key={food.id} className="rounded-lg border border-slate-200 p-3">
-                  <p className="font-medium">{food.name}</p>
-                  <p className="text-sm text-slate-500">{food.barcode}</p>
+                <li key={food.id} className="rounded-2xl border border-[var(--brand-line)] p-3">
+                  <p className="font-bold text-[var(--brand-ink)]">{food.name}</p>
+                  <p className="text-sm text-[var(--brand-muted)]">{food.barcode}</p>
                 </li>
               ))}
             </ul>
