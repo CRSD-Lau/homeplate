@@ -104,9 +104,13 @@ export async function getFoodsPageData({
   source?: "all" | "manual" | "verified" | "provisional";
   userId?: string;
 } = {}) {
-  const [options, aliases] = await Promise.all([
-    getFoodSearchOptions({ query, source, userId }),
-    getFoodAliasesByFood(),
+  if (!hasFoodSearchQuery(query)) return [];
+
+  const options = await getFoodSearchOptions({ query, source, userId });
+  if (options.length === 0) return [];
+
+  const aliases = await getFoodAliasesByFood([
+    ...new Set(options.map((option) => option.foodId)),
   ]);
   const byFood = new Map<string, (typeof options)[number] & { servings: FoodServingOption[] }>();
 
@@ -345,13 +349,16 @@ async function getFoodSearchRows({
   return Array.from(rows) as FoodSearchDbRow[];
 }
 
-async function getFoodAliasesByFood() {
+async function getFoodAliasesByFood(foodIds: string[]) {
+  if (foodIds.length === 0) return new Map<string, string[]>();
+
   const rows = await getDb()
     .select({
       foodId: foodAliases.foodId,
       alias: foodAliases.alias,
     })
     .from(foodAliases)
+    .where(inArray(foodAliases.foodId, foodIds))
     .orderBy(asc(foodAliases.alias));
   const byFood = new Map<string, string[]>();
 
