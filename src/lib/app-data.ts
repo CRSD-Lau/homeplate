@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { getDb } from "@/db";
@@ -22,6 +22,7 @@ import {
   weightLogs,
 } from "@/db/schema";
 import { calculateBmi } from "@/lib/bmi";
+import { getBarcodeLookupKeys } from "@/lib/barcodes";
 import {
   normalizeDateInputValue,
   parseDateInputValue,
@@ -133,6 +134,9 @@ export async function getFoodOptions(userId?: string) {
 }
 
 export async function getFoodsByBarcode(barcode: string) {
+  const barcodeKeys = getBarcodeLookupKeys(barcode);
+  if (barcodeKeys.length === 0) return [];
+
   const rows = await getDb()
     .select({
       foodId: foods.id,
@@ -156,7 +160,7 @@ export async function getFoodsByBarcode(barcode: string) {
       and(eq(servings.foodId, foods.id), eq(servings.isDefault, true)),
     )
     .innerJoin(foodNutrientValues, eq(foodNutrientValues.servingId, servings.id))
-    .where(eq(foods.barcode, barcode))
+    .where(inArray(foods.barcode, barcodeKeys))
     .orderBy(asc(foods.name));
 
   return rows.map((row) => ({
