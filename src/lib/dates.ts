@@ -11,10 +11,14 @@ export function toDateInputValue(date = new Date()) {
   return format(date, "yyyy-MM-dd");
 }
 
-export function normalizeDateInputValue(value: string | null | undefined) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? value
-    : toDateInputValue();
+export function normalizeDateInputValue(
+  value: string | null | undefined,
+  maxDate?: string,
+) {
+  const normalized =
+    value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : toDateInputValue();
+
+  return maxDate && normalized > maxDate ? maxDate : normalized;
 }
 
 export function parseDateInputValue(value: string) {

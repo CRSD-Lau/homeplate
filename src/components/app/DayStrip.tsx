@@ -21,31 +21,28 @@ export function DayStrip({
   const logged = new Set(loggedDates);
 
   return (
-    <div className="-mx-1 overflow-x-auto px-1 pb-1">
+    <div className="-mx-1 overflow-x-auto px-1 py-2">
       <div className="grid min-w-full grid-cols-7 gap-1">
         {days.map((date) => {
           const parsed = parseDateInputValue(date);
-          const selected = date === selectedDate;
+          const isFuture = date > today;
+          const selected = date === selectedDate && !isFuture;
           const isToday = date === today;
-          const completed = logged.has(date);
+          const completed = !isFuture && logged.has(date);
           const dayName = parsed
             .toLocaleDateString("en-CA", { weekday: "short" })
             .charAt(0);
-
-          return (
-            <Link
-              key={date}
-              href={`${basePath}?date=${date}`}
-              className="flex min-h-16 flex-col items-center justify-center gap-1 text-center"
-              aria-current={selected ? "date" : undefined}
-            >
+          const content = (
+            <>
               <span
                 className={`relative flex h-12 w-12 flex-col items-center justify-center rounded-full border text-sm font-extrabold leading-none transition ${
                   selected
                     ? "border-[var(--brand-teal)] bg-[var(--brand-teal)] text-white ring-4 ring-[color-mix(in_srgb,var(--brand-teal)_24%,transparent)]"
-                    : isToday
-                      ? "border-[var(--brand-teal)] bg-[var(--brand-card)] text-[var(--brand-teal)]"
-                      : "border-[var(--brand-line)] bg-[var(--brand-card)] text-[var(--brand-ink)]"
+                    : isFuture
+                      ? "border-[var(--brand-line)] bg-[var(--brand-soft)] text-[var(--brand-muted)] opacity-60"
+                      : isToday
+                        ? "border-[var(--brand-teal)] bg-[var(--brand-card)] text-[var(--brand-teal)]"
+                        : "border-[var(--brand-line)] bg-[var(--brand-card)] text-[var(--brand-ink)]"
                 }`}
               >
                 {dayName}
@@ -58,11 +55,32 @@ export function DayStrip({
               </span>
               <span
                 className={`text-[0.7rem] font-bold ${
-                  selected ? "text-[var(--brand-teal)]" : "text-[var(--brand-muted)]"
+                  selected
+                    ? "text-[var(--brand-teal)]"
+                    : "text-[var(--brand-muted)]"
                 }`}
               >
                 {isToday ? "TODAY" : "\u00a0"}
               </span>
+            </>
+          );
+
+          return isFuture ? (
+            <span
+              key={date}
+              className="flex min-h-16 flex-col items-center justify-center gap-1 text-center"
+              aria-disabled="true"
+            >
+              {content}
+            </span>
+          ) : (
+            <Link
+              key={date}
+              href={`${basePath}?date=${date}`}
+              className="flex min-h-16 flex-col items-center justify-center gap-1 text-center"
+              aria-current={selected ? "date" : undefined}
+            >
+              {content}
             </Link>
           );
         })}

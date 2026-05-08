@@ -15,7 +15,11 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { getDashboardData } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
-import { normalizeDateInputValue, parseDateInputValue } from "@/lib/dates";
+import {
+  normalizeDateInputValue,
+  parseDateInputValue,
+  toDateInputValue,
+} from "@/lib/dates";
 import {
   formatGlucose,
   formatNumber,
@@ -30,7 +34,7 @@ export default async function DashboardPage({
 }) {
   const user = await requireUser();
   const { date } = await searchParams;
-  const selectedDate = normalizeDateInputValue(date);
+  const selectedDate = normalizeDateInputValue(date, toDateInputValue());
   const data = await getDashboardData(user.id, selectedDate);
   const selectedDay = parseDateInputValue(data.today);
   const calorieTarget = data.dashboardPreferences.calorieTarget;
@@ -73,14 +77,20 @@ export default async function DashboardPage({
               </p>
             </div>
           </div>
-          <Link href="/settings" className="icon-button" aria-label="Open goals">
+          <Link
+            href="/settings"
+            className="icon-button"
+            aria-label="Open goals"
+          >
             <Settings aria-hidden="true" size={18} />
           </Link>
         </div>
 
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
-            <p className="text-sm font-bold text-[var(--brand-ink)]">Calories</p>
+            <p className="text-sm font-bold text-[var(--brand-ink)]">
+              Calories
+            </p>
             <p className="text-4xl font-extrabold tracking-normal text-[var(--brand-ink)]">
               {formatNumber(data.nutrition.calories, 0)}
             </p>

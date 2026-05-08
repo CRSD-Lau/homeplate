@@ -31,7 +31,7 @@ export function FoodSearch({
         />
         <input type="hidden" name="source" value={source} />
       </form>
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-3">
         {chips.map((chip) => {
           const active = source === chip.value;
           const href =
