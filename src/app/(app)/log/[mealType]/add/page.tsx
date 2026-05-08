@@ -14,6 +14,7 @@ import {
   getMealReviewPageData,
 } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
+import { hasFoodSearchQuery } from "@/lib/food-search";
 import { formatMealLabel } from "@/lib/tracking";
 import { formatNumber } from "@/lib/units";
 
@@ -33,6 +34,8 @@ export default async function AddFoodPage({
 }) {
   const user = await requireUser();
   const [{ mealType }, query] = await Promise.all([params, searchParams]);
+  const hasQuery = hasFoodSearchQuery(query.q);
+  const trimmedQuery = query.q?.trim() ?? "";
   const [data, review] = await Promise.all([
     getFoodAddPageData({
       userId: user.id,
@@ -52,6 +55,9 @@ export default async function AddFoodPage({
     date: data.date,
   });
   const scanHref = `/scan?${scanParams.toString()}`;
+  const manualFoodHref = hasQuery
+    ? `/foods?q=${encodeURIComponent(trimmedQuery)}#manual-food`
+    : "/foods#manual-food";
   const copySources = data.copySources.filter(
     (source) =>
       !(
@@ -193,11 +199,30 @@ export default async function AddFoodPage({
         </section>
       ) : (
         <>
-          {data.foodOptions.length === 0 ? (
+          {!hasQuery ? (
             <EmptyState
-              title="No foods match your search."
-              description="Try a different term or add a manual food in Foods."
+              title="Search to add a food."
+              description="Start typing a food, brand, or barcode name to see matches."
             />
+          ) : data.foodOptions.length === 0 ? (
+            <div className="hp-card space-y-4 p-5 text-center">
+              <div>
+                <h2 className="text-xl font-extrabold text-[var(--brand-ink)]">
+                  No foods match your search.
+                </h2>
+                <p className="mt-2 text-sm font-medium text-[var(--brand-muted)]">
+                  Try scanning a barcode or add this food manually.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Link href={scanHref} className="secondary-button">
+                  Scan barcode
+                </Link>
+                <Link href={manualFoodHref} className="secondary-button">
+                  Add manual food
+                </Link>
+              </div>
+            </div>
           ) : (
             <section className="hp-card p-4">
               {data.foodOptions.slice(0, 80).map((food) => (
