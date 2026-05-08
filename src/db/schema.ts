@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -194,6 +195,9 @@ export const sourceRecords = pgTable(
   (table) => [
     index("source_records_data_source_id_idx").on(table.dataSourceId),
     index("source_records_barcode_idx").on(table.barcode),
+    uniqueIndex("source_records_source_external_unique")
+      .on(table.dataSourceId, table.externalId)
+      .where(sql`${table.externalId} IS NOT NULL`),
   ],
 );
 
@@ -219,6 +223,11 @@ export const foods = pgTable(
     index("foods_name_idx").on(table.name),
     index("foods_barcode_idx").on(table.barcode),
     index("foods_source_id_idx").on(table.sourceId),
+    uniqueIndex("foods_source_external_unique")
+      .on(table.sourceId, table.sourceExternalId)
+      .where(
+        sql`${table.sourceId} IS NOT NULL AND ${table.sourceExternalId} IS NOT NULL`,
+      ),
   ],
 );
 

@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "foods_source_external_unique" ON "foods" USING btree ("source_id","source_external_id") WHERE "foods"."source_id" IS NOT NULL AND "foods"."source_external_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "source_records_source_external_unique" ON "source_records" USING btree ("data_source_id","external_id") WHERE "source_records"."external_id" IS NOT NULL;
