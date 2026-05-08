@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { scaleNutrients, sumNutrients } from "./nutrition";
+import {
+  calculateServingScale,
+  scaleNutrientsForServing,
+  scaleNutrients,
+  sumNutrients,
+} from "./nutrition";
 
 describe("nutrition calculations", () => {
   it("scales nutrients by quantity for food log snapshots", () => {
@@ -37,5 +42,109 @@ describe("nutrition calculations", () => {
     expect(total.calories).toBe(150);
     expect(total.proteinG).toBe(13);
     expect(total.fibreG).toBe(1);
+  });
+
+  it("scales nutrients from the default gram serving to another serving", () => {
+    const scaled = scaleNutrientsForServing(
+      {
+        calories: 100,
+        proteinG: 10,
+        carbsG: 12,
+        fatG: 3,
+      },
+      {
+        baseServing: {
+          id: "base",
+          isDefault: true,
+          grams: 100,
+          millilitres: null,
+        },
+        selectedServing: {
+          id: "bowl",
+          isDefault: false,
+          grams: 250,
+          millilitres: null,
+        },
+        quantity: 2,
+      },
+    );
+
+    expect(scaled).toEqual({
+      calories: 500,
+      proteinG: 50,
+      carbsG: 60,
+      fatG: 15,
+      fibreG: null,
+      sugarG: null,
+      sodiumMg: null,
+    });
+  });
+
+  it("scales nutrients from the default millilitre serving to another serving", () => {
+    expect(
+      calculateServingScale({
+        baseServing: {
+          id: "base",
+          isDefault: true,
+          grams: null,
+          millilitres: 250,
+        },
+        selectedServing: {
+          id: "small",
+          isDefault: false,
+          grams: null,
+          millilitres: 125,
+        },
+        quantity: 3,
+      }),
+    ).toBe(1.5);
+  });
+
+  it("uses quantity directly for the default serving even without conversion values", () => {
+    expect(
+      calculateServingScale({
+        baseServing: {
+          id: "base",
+          isDefault: true,
+          grams: null,
+          millilitres: null,
+        },
+        selectedServing: {
+          id: "base",
+          isDefault: true,
+          grams: null,
+          millilitres: null,
+        },
+        quantity: 1.25,
+      }),
+    ).toBe(1.25);
+  });
+
+  it("returns null when a non-default serving cannot be converted", () => {
+    expect(
+      scaleNutrientsForServing(
+        {
+          calories: 100,
+          proteinG: 10,
+          carbsG: 12,
+          fatG: 3,
+        },
+        {
+          baseServing: {
+            id: "base",
+            isDefault: true,
+            grams: 100,
+            millilitres: null,
+          },
+          selectedServing: {
+            id: "mystery",
+            isDefault: false,
+            grams: null,
+            millilitres: null,
+          },
+          quantity: 1,
+        },
+      ),
+    ).toBeNull();
   });
 });

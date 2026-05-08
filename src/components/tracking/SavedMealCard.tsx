@@ -1,8 +1,10 @@
 import {
   addSavedMealToLogAction,
   deleteSavedMealAction,
+  toggleSavedMealFavoriteAction,
   updateSavedMealAction,
 } from "@/app/actions";
+import { Star } from "lucide-react";
 import { ACTIVE_MEAL_TYPES, formatMealLabel } from "@/lib/tracking";
 import { formatNumber } from "@/lib/units";
 
@@ -10,6 +12,7 @@ type SavedMeal = {
   id: string;
   name: string;
   mealType: string | null;
+  isFavorite: boolean;
   notes: string | null;
   items: unknown[];
   totals: {
@@ -34,14 +37,35 @@ export function SavedMealCard({
   return (
     <article className="hp-card p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="break-words text-lg font-extrabold text-[var(--brand-ink)]">
-            {meal.name}
-          </h3>
-          <p className="text-sm font-medium text-[var(--brand-muted)]">
-            {meal.items.length} item{meal.items.length === 1 ? "" : "s"}
-            {meal.mealType ? ` · ${formatMealLabel(meal.mealType)}` : ""}
-          </p>
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-2">
+          <form action={toggleSavedMealFavoriteAction}>
+            <input type="hidden" name="id" value={meal.id} />
+            <input type="hidden" name="returnTo" value={returnTo} />
+            <button
+              type="submit"
+              className="icon-button"
+              aria-label={
+                meal.isFavorite
+                  ? `Remove ${meal.name} from favourite meals`
+                  : `Add ${meal.name} to favourite meals`
+              }
+            >
+              <Star
+                aria-hidden="true"
+                size={19}
+                fill={meal.isFavorite ? "currentColor" : "none"}
+              />
+            </button>
+          </form>
+          <div className="min-w-0">
+            <h3 className="break-words text-lg font-extrabold text-[var(--brand-ink)]">
+              {meal.name}
+            </h3>
+            <p className="text-sm font-medium text-[var(--brand-muted)]">
+              {meal.items.length} item{meal.items.length === 1 ? "" : "s"}
+              {meal.mealType ? ` · ${formatMealLabel(meal.mealType)}` : ""}
+            </p>
+          </div>
         </div>
         <span className="rounded-full bg-[var(--brand-soft)] px-3 py-1 text-sm font-extrabold text-[var(--brand-teal)]">
           {formatNumber(meal.totals.calories, 0)} cal

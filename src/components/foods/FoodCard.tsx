@@ -22,6 +22,9 @@ type FoodCardProps = {
     fibreG: number | null;
     sugarG: number | null;
     sodiumMg: number | null;
+    aliases?: string[];
+    servingOptionsText?: string;
+    servings?: { servingId: string; servingLabel: string }[];
   };
 };
 
@@ -58,8 +61,14 @@ export function FoodCard({ food }: FoodCardProps) {
             value={`${food.servingLabel}${food.grams ? ` · ${formatNumber(food.grams, 0)}g` : ""}${food.millilitres ? ` · ${formatNumber(food.millilitres, 0)}ml` : ""}`}
           />
           <FoodDetail
-            label="Extra"
-            value={`Fiber ${formatNumber(food.fibreG ?? 0, 0)}g · Sugar ${formatNumber(food.sugarG ?? 0, 0)}g`}
+            label="Search"
+            value={
+              food.aliases && food.aliases.length > 0
+                ? food.aliases.join(", ")
+                : `${food.servings?.length ?? 1} serving option${
+                    (food.servings?.length ?? 1) === 1 ? "" : "s"
+                  }`
+            }
           />
         </div>
 
@@ -86,6 +95,14 @@ export function FoodCard({ food }: FoodCardProps) {
                 </FoodField>
                 <FoodField label="Brand">
                   <input name="brand" defaultValue={food.brand ?? ""} className="field" />
+                </FoodField>
+                <FoodField label="Aliases">
+                  <textarea
+                    name="aliases"
+                    rows={2}
+                    defaultValue={food.aliases?.join(", ") ?? ""}
+                    className="field min-h-20"
+                  />
                 </FoodField>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <FoodField label="Serving label">
@@ -117,6 +134,14 @@ export function FoodCard({ food }: FoodCardProps) {
                     />
                   </FoodField>
                 </div>
+                <FoodField label="Additional servings">
+                  <textarea
+                    name="servingOptions"
+                    rows={3}
+                    defaultValue={food.servingOptionsText ?? ""}
+                    className="field min-h-24"
+                  />
+                </FoodField>
                 <div className="grid grid-cols-2 gap-3">
                   <FoodField label="Calories">
                     <input

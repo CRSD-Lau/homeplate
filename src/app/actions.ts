@@ -1,6 +1,7 @@
 "use server";
 
 import { and, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -11,6 +12,8 @@ import {
   bloodPressureLogs,
   dataSources,
   exerciseLogs,
+  foodAliases,
+  foodFavorites,
   foodLogs,
   foodNutrientValues,
   foods,
@@ -24,6 +27,9 @@ import {
   weightLogs,
 } from "@/db/schema";
 import { destroySession, requireUser } from "@/lib/auth/session";
+import { parseAliasInput } from "@/lib/food-aliases";
+import { buildCopiedFoodLogs, type CurrentCopyFoodItem } from "@/lib/food-copy";
+import { parseServingOptionsInput } from "@/lib/food-servings";
 import {
   serializeDashboardPreferences,
   type DashboardPreferences,
@@ -32,7 +38,10 @@ import {
   removeProfilePicture,
   saveProfilePicture,
 } from "@/lib/profile-picture";
-import { scaleNutrients } from "@/lib/nutrition";
+import {
+  scaleNutrientsForServing,
+  type NutrientSnapshot,
+} from "@/lib/nutrition";
 import {
   ALL_MEAL_TYPES,
   normalizeMealType,
@@ -252,6 +261,10 @@ export async function removeProfilePictureAction() {
 export async function createManualFoodAction(formData: FormData) {
   const user = await requireUser();
   const sourceId = await getManualDataSourceId();
+  const aliases = parseAliasInput(optionalString(formData, "aliases"));
+  const additionalServings = parseServingOptionsInput(
+    optionalString(formData, "servingOptions"),
+  );
 
   const [food] = await getDb()
     .insert(foods)
@@ -287,6 +300,8 @@ export async function createManualFoodAction(formData: FormData) {
     sugarG: optionalNumber(formData, "sugarG"),
     sodiumMg: optionalNumber(formData, "sodiumMg"),
   });
+  await syncFoodAliases(food.id, aliases);
+  await replaceAdditionalServings(food.id, additionalServings);
 
   revalidatePath("/foods");
   revalidatePath("/log");
@@ -296,6 +311,10 @@ export async function createManualFoodAction(formData: FormData) {
 export async function updateManualFoodAction(formData: FormData) {
   await requireUser();
   const foodId = requiredString(formData, "foodId");
+  const aliases = parseAliasInput(optionalString(formData, "aliases"));
+  const additionalServings = parseServingOptionsInput(
+    optionalString(formData, "servingOptions"),
+  );
 
   const [food] = await getDb()
     .select({ id: foods.id, foodType: foods.foodType })
@@ -351,6 +370,8 @@ export async function updateManualFoodAction(formData: FormData) {
       sodiumMg: optionalNumber(formData, "sodiumMg"),
     })
     .where(eq(foodNutrientValues.servingId, serving.id));
+  await syncFoodAliases(foodId, aliases);
+  await replaceAdditionalServings(foodId, additionalServings);
 
   revalidatePath("/foods");
   revalidatePath("/log");
@@ -372,36 +393,25 @@ export async function logFoodAction(formData: FormData) {
     `/log?date=${encodeURIComponent(logDate)}&meal=${mealType}`,
   );
 
-  const [row] = await getDb()
-    .select({
-      foodId: foods.id,
-      foodName: foods.name,
-      brand: foods.brand,
-      confidenceStatus: foods.confidenceStatus,
-      servingId: servings.id,
-      servingLabel: servings.label,
-      calories: foodNutrientValues.calories,
-      proteinG: foodNutrientValues.proteinG,
-      carbsG: foodNutrientValues.carbsG,
-      fatG: foodNutrientValues.fatG,
-      fibreG: foodNutrientValues.fibreG,
-      sugarG: foodNutrientValues.sugarG,
-      sodiumMg: foodNutrientValues.sodiumMg,
-    })
-    .from(foods)
-    .innerJoin(servings, eq(servings.foodId, foods.id))
-    .innerJoin(
-      foodNutrientValues,
-      eq(foodNutrientValues.servingId, servings.id),
-    )
-    .where(and(eq(foods.id, foodId), eq(servings.id, servingId)))
-    .limit(1);
+  const row = await getCurrentFoodServing(foodId, servingId);
 
   if (!row) {
     throw new Error("Selected food could not be found.");
   }
 
-  const scaled = scaleNutrients(row, quantity);
+  const scaled = scaleNutrientsForServing(row.nutrients, {
+    baseServing: row.baseServing,
+    selectedServing: row.selectedServing,
+    quantity,
+  });
+
+  if (!scaled) {
+    redirect(
+      `${successPath}&error=${encodeURIComponent(
+        "Selected serving needs grams or millilitres before it can be logged.",
+      )}`,
+    );
+  }
 
   await getDb().insert(foodLogs).values({
     userId: user.id,
@@ -430,6 +440,34 @@ export async function logFoodAction(formData: FormData) {
   revalidatePath("/dashboard");
   revalidatePath("/health");
   redirect(successPath);
+}
+
+export async function toggleFoodFavoriteAction(formData: FormData) {
+  await requireUser();
+  const foodId = requiredString(formData, "foodId");
+  const servingId = requiredString(formData, "servingId");
+  const returnTo = safeReturnTo(formData, "/log");
+
+  const [existing] = await getDb()
+    .select({ id: foodFavorites.id })
+    .from(foodFavorites)
+    .where(
+      and(
+        eq(foodFavorites.foodId, foodId),
+        eq(foodFavorites.servingId, servingId),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    await getDb().delete(foodFavorites).where(eq(foodFavorites.id, existing.id));
+  } else {
+    await getDb().insert(foodFavorites).values({ foodId, servingId });
+  }
+
+  revalidatePath("/log");
+  revalidatePath("/foods");
+  redirect(returnTo);
 }
 
 export async function logWeightAction(formData: FormData) {
@@ -715,6 +753,30 @@ export async function deleteSavedMealAction(formData: FormData) {
   redirect(successPath);
 }
 
+export async function toggleSavedMealFavoriteAction(formData: FormData) {
+  const user = await requireUser();
+  const id = requiredString(formData, "id");
+  const returnTo = safeReturnTo(formData, "/log");
+
+  const [meal] = await getDb()
+    .select({ id: savedMeals.id, isFavorite: savedMeals.isFavorite })
+    .from(savedMeals)
+    .where(and(eq(savedMeals.id, id), eq(savedMeals.userId, user.id)))
+    .limit(1);
+
+  if (!meal) {
+    redirect(`/log?error=${encodeURIComponent("Saved meal could not be found.")}`);
+  }
+
+  await getDb()
+    .update(savedMeals)
+    .set({ isFavorite: !meal.isFavorite, updatedAt: new Date() })
+    .where(and(eq(savedMeals.id, id), eq(savedMeals.userId, user.id)));
+
+  revalidatePath("/log");
+  redirect(returnTo);
+}
+
 export async function addSavedMealToLogAction(formData: FormData) {
   const user = await requireUser();
   const savedMealId = requiredString(formData, "savedMealId");
@@ -737,68 +799,126 @@ export async function addSavedMealToLogAction(formData: FormData) {
     redirect(`/log?error=${encodeURIComponent("Saved meal could not be found.")}`);
   }
 
-  const rows = await getDb()
+  const sourceItems = await getDb()
     .select({
-      foodId: foods.id,
-      foodName: foods.name,
-      brand: foods.brand,
-      confidenceStatus: foods.confidenceStatus,
-      servingId: servings.id,
-      servingLabel: servings.label,
+      foodId: savedMealItems.foodId,
+      servingId: savedMealItems.servingId,
       quantity: savedMealItems.quantity,
-      calories: foodNutrientValues.calories,
-      proteinG: foodNutrientValues.proteinG,
-      carbsG: foodNutrientValues.carbsG,
-      fatG: foodNutrientValues.fatG,
-      fibreG: foodNutrientValues.fibreG,
-      sugarG: foodNutrientValues.sugarG,
-      sodiumMg: foodNutrientValues.sodiumMg,
+      notes: savedMeals.notes,
     })
     .from(savedMealItems)
-    .innerJoin(foods, eq(savedMealItems.foodId, foods.id))
-    .leftJoin(servings, eq(savedMealItems.servingId, servings.id))
-    .innerJoin(
-      foodNutrientValues,
-      eq(foodNutrientValues.servingId, savedMealItems.servingId),
-    )
+    .innerJoin(savedMeals, eq(savedMealItems.savedMealId, savedMeals.id))
     .where(eq(savedMealItems.savedMealId, savedMealId));
 
-  if (rows.length === 0) {
+  if (sourceItems.length === 0) {
     redirect(`/log?error=${encodeURIComponent("Saved meal has no foods.")}`);
   }
 
+  const currentItemsByKey = await getCurrentFoodServingMap(sourceItems);
+  const copyResult = buildCopiedFoodLogs({
+    userId: user.id,
+    logDate,
+    mealType,
+    sourceItems,
+    currentItemsByKey,
+  });
+
+  if (copyResult.logs.length === 0) {
+    redirect(
+      addSearchParams(successPath, {
+        error: "Saved meal foods are no longer available.",
+      }),
+    );
+  }
+
   await getDb().insert(foodLogs).values(
-    rows.map((row) => {
-      const scaled = scaleNutrients(row, row.quantity);
-      return {
-        userId: user.id,
-        foodId: row.foodId,
-        servingId: row.servingId,
-        logDate,
-        mealType,
-        quantity: row.quantity,
-        foodNameSnapshot: row.brand ? `${row.brand} ${row.foodName}` : row.foodName,
-        servingLabelSnapshot: row.servingLabel,
-        caloriesSnapshot: scaled.calories,
-        proteinGSnapshot: scaled.proteinG,
-        carbsGSnapshot: scaled.carbsG,
-        fatGSnapshot: scaled.fatG,
-        fibreGSnapshot: scaled.fibreG ?? null,
-        sugarGSnapshot: scaled.sugarG ?? null,
-        sodiumMgSnapshot: scaled.sodiumMg ?? null,
-        sourceSnapshot: {
-          confidenceStatus: row.confidenceStatus,
-          source: "saved_meal",
-          savedMealId,
-        },
-      };
-    }),
+    copyResult.logs.map((log) => ({
+      ...log,
+      sourceSnapshot: {
+        ...log.sourceSnapshot,
+        source: "saved_meal",
+        savedMealId,
+      },
+    })),
   );
 
   revalidatePath("/log");
   revalidatePath("/dashboard");
   revalidatePath("/health");
-  redirect(successPath);
+  redirect(
+    addSearchParams(successPath, {
+      skipped: copyResult.skippedCount || null,
+    }),
+  );
+}
+
+export async function copyLoggedMealAction(formData: FormData) {
+  const user = await requireUser();
+  const sourceDate = requiredString(formData, "sourceDate");
+  const sourceMealType = normalizeMealType(
+    mealTypeSchema.parse(requiredString(formData, "sourceMealType")),
+  );
+  const logDate = requiredString(formData, "logDate");
+  const mealType = normalizeMealType(
+    mealTypeSchema.parse(requiredString(formData, "mealType")),
+  );
+  const successPath = safeReturnTo(
+    formData,
+    `/log/${mealType}/add?date=${encodeURIComponent(logDate)}&tab=my-meals`,
+  );
+
+  const sourceItems = await getDb()
+    .select({
+      foodId: foodLogs.foodId,
+      servingId: foodLogs.servingId,
+      quantity: foodLogs.quantity,
+      notes: foodLogs.notes,
+    })
+    .from(foodLogs)
+    .where(
+      and(
+        eq(foodLogs.userId, user.id),
+        eq(foodLogs.logDate, sourceDate),
+        eq(foodLogs.mealType, sourceMealType),
+      ),
+    );
+
+  if (sourceItems.length === 0) {
+    redirect(
+      addSearchParams(successPath, {
+        error: "There are no foods to copy from that meal.",
+      }),
+    );
+  }
+
+  const currentItemsByKey = await getCurrentFoodServingMap(sourceItems);
+  const copyResult = buildCopiedFoodLogs({
+    userId: user.id,
+    logDate,
+    mealType,
+    sourceItems,
+    currentItemsByKey,
+  });
+
+  if (copyResult.logs.length === 0) {
+    redirect(
+      addSearchParams(successPath, {
+        error: "Those foods are no longer available to copy.",
+      }),
+    );
+  }
+
+  await getDb().insert(foodLogs).values(copyResult.logs);
+
+  revalidatePath("/log");
+  revalidatePath("/dashboard");
+  revalidatePath("/health");
+  redirect(
+    addSearchParams(successPath, {
+      saved: "copy",
+      skipped: copyResult.skippedCount || null,
+    }),
+  );
 }
 
 export async function logBloodPressureAction(formData: FormData) {
@@ -925,6 +1045,126 @@ async function getManualDataSourceId() {
     .returning({ id: dataSources.id });
 
   return source.id;
+}
+
+async function syncFoodAliases(foodId: string, aliases: string[]) {
+  await getDb().delete(foodAliases).where(eq(foodAliases.foodId, foodId));
+
+  if (aliases.length === 0) return;
+
+  await getDb().insert(foodAliases).values(
+    aliases.map((aliasValue) => ({
+      foodId,
+      alias: aliasValue,
+    })),
+  );
+}
+
+async function replaceAdditionalServings(
+  foodId: string,
+  servingOptions: { label: string; grams: number | null; millilitres: number | null }[],
+) {
+  await getDb()
+    .delete(servings)
+    .where(and(eq(servings.foodId, foodId), eq(servings.isDefault, false)));
+
+  if (servingOptions.length === 0) return;
+
+  await getDb().insert(servings).values(
+    servingOptions.map((serving) => ({
+      foodId,
+      label: serving.label,
+      grams: serving.grams,
+      millilitres: serving.millilitres,
+      isDefault: false,
+    })),
+  );
+}
+
+async function getCurrentFoodServing(foodId: string, servingId: string) {
+  const baseServings = alias(servings, "current_base_servings");
+  const [row] = await getDb()
+    .select({
+      foodId: foods.id,
+      foodName: foods.name,
+      brand: foods.brand,
+      confidenceStatus: foods.confidenceStatus,
+      servingId: servings.id,
+      servingLabel: servings.label,
+      servingIsDefault: servings.isDefault,
+      servingGrams: servings.grams,
+      servingMillilitres: servings.millilitres,
+      baseServingId: baseServings.id,
+      baseServingGrams: baseServings.grams,
+      baseServingMillilitres: baseServings.millilitres,
+      calories: foodNutrientValues.calories,
+      proteinG: foodNutrientValues.proteinG,
+      carbsG: foodNutrientValues.carbsG,
+      fatG: foodNutrientValues.fatG,
+      fibreG: foodNutrientValues.fibreG,
+      sugarG: foodNutrientValues.sugarG,
+      sodiumMg: foodNutrientValues.sodiumMg,
+    })
+    .from(foods)
+    .innerJoin(servings, eq(servings.foodId, foods.id))
+    .innerJoin(
+      baseServings,
+      and(eq(baseServings.foodId, foods.id), eq(baseServings.isDefault, true)),
+    )
+    .innerJoin(foodNutrientValues, eq(foodNutrientValues.servingId, baseServings.id))
+    .where(and(eq(foods.id, foodId), eq(servings.id, servingId)))
+    .limit(1);
+
+  if (!row) return null;
+
+  return {
+    foodId: row.foodId,
+    servingId: row.servingId,
+    foodName: row.foodName,
+    brand: row.brand,
+    confidenceStatus: row.confidenceStatus,
+    servingLabel: row.servingLabel,
+    baseServing: {
+      id: row.baseServingId,
+      isDefault: true,
+      grams: row.baseServingGrams,
+      millilitres: row.baseServingMillilitres,
+    },
+    selectedServing: {
+      id: row.servingId,
+      isDefault: row.servingIsDefault,
+      grams: row.servingGrams,
+      millilitres: row.servingMillilitres,
+    },
+    nutrients: {
+      calories: row.calories,
+      proteinG: row.proteinG,
+      carbsG: row.carbsG,
+      fatG: row.fatG,
+      fibreG: row.fibreG,
+      sugarG: row.sugarG,
+      sodiumMg: row.sodiumMg,
+    } satisfies NutrientSnapshot,
+  };
+}
+
+async function getCurrentFoodServingMap(
+  foodServingPairs: { foodId: string | null; servingId: string | null }[],
+) {
+  const pairs = foodServingPairs.filter(
+    (pair): pair is { foodId: string; servingId: string } =>
+      Boolean(pair.foodId && pair.servingId),
+  );
+  const currentItems = new Map<string, CurrentCopyFoodItem>();
+
+  for (const pair of pairs) {
+    const current = await getCurrentFoodServing(pair.foodId, pair.servingId);
+    if (current) {
+      currentItems.set(`${pair.foodId}|${pair.servingId}`, current);
+    }
+  }
+
+  return currentItems;
 }
 
 async function deleteOwnLog(
@@ -1074,4 +1314,18 @@ function safeReturnTo(formData: FormData, fallback: string) {
   } catch {
     return fallback;
   }
+}
+
+function addSearchParams(
+  path: string,
+  params: Record<string, string | number | null>,
+) {
+  const url = new URL(path, "http://homeplate.local");
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null) continue;
+    url.searchParams.set(key, String(value));
+  }
+
+  return `${url.pathname}${url.search}`;
 }

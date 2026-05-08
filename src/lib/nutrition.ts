@@ -8,6 +8,13 @@ export type NutrientSnapshot = {
   sodiumMg?: number | null;
 };
 
+export type ServingConversion = {
+  id: string;
+  isDefault: boolean;
+  grams: number | null;
+  millilitres: number | null;
+};
+
 const optionalNutrients = ["fibreG", "sugarG", "sodiumMg"] as const;
 
 export function scaleNutrients<T extends NutrientSnapshot>(
@@ -27,6 +34,52 @@ export function scaleNutrients<T extends NutrientSnapshot>(
   }
 
   return scaled;
+}
+
+export function calculateServingScale({
+  baseServing,
+  selectedServing,
+  quantity,
+}: {
+  baseServing: ServingConversion;
+  selectedServing: ServingConversion;
+  quantity: number;
+}) {
+  if (selectedServing.isDefault || selectedServing.id === baseServing.id) {
+    return quantity;
+  }
+
+  if (
+    baseServing.grams !== null &&
+    baseServing.grams > 0 &&
+    selectedServing.grams !== null &&
+    selectedServing.grams > 0
+  ) {
+    return (selectedServing.grams / baseServing.grams) * quantity;
+  }
+
+  if (
+    baseServing.millilitres !== null &&
+    baseServing.millilitres > 0 &&
+    selectedServing.millilitres !== null &&
+    selectedServing.millilitres > 0
+  ) {
+    return (selectedServing.millilitres / baseServing.millilitres) * quantity;
+  }
+
+  return null;
+}
+
+export function scaleNutrientsForServing<T extends NutrientSnapshot>(
+  nutrients: T,
+  options: {
+    baseServing: ServingConversion;
+    selectedServing: ServingConversion;
+    quantity: number;
+  },
+) {
+  const scale = calculateServingScale(options);
+  return scale === null ? null : scaleNutrients(nutrients, scale);
 }
 
 export function sumNutrients(items: NutrientSnapshot[]): NutrientSnapshot {

@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, gte } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { getDb } from "@/db";
 import {
@@ -6,6 +7,7 @@ import {
   bloodPressureLogs,
   dataSources,
   exerciseLogs,
+  foodAliases,
   foodLogs,
   foodNutrientValues,
   foods,
@@ -22,17 +24,25 @@ import {
 import { calculateBmi } from "@/lib/bmi";
 import {
   normalizeDateInputValue,
+  parseDateInputValue,
   recentDateKeys,
   toDateInputValue,
 } from "@/lib/dates";
+import { formatServingOptionsInput } from "@/lib/food-servings";
+import { rankFoodSearchResults } from "@/lib/food-search";
 import { parseDashboardPreferences } from "@/lib/dashboard-preferences";
-import { sumNutrients } from "@/lib/nutrition";
+import {
+  scaleNutrientsForServing,
+  sumNutrients,
+} from "@/lib/nutrition";
 import {
   calculateMealTotals,
   calculateSavedMealTotals,
   calculateStepTotal,
   normalizeMealType,
+  type MealType,
 } from "@/lib/tracking";
+import { subDays } from "date-fns";
 
 export async function getProfileAndSettings(userId: string) {
   const db = getDb();
@@ -81,99 +91,321 @@ export async function getSettingsPageData(userId: string) {
   };
 }
 
-export async function getFoodOptions() {
-  return getDb()
-    .select({
-      foodId: foods.id,
-      foodName: foods.name,
-      brand: foods.brand,
-      confidenceStatus: foods.confidenceStatus,
-      servingId: servings.id,
-      servingLabel: servings.label,
-      calories: foodNutrientValues.calories,
-      proteinG: foodNutrientValues.proteinG,
-      carbsG: foodNutrientValues.carbsG,
-      fatG: foodNutrientValues.fatG,
-    })
-    .from(foods)
-    .innerJoin(
-      servings,
-      and(eq(servings.foodId, foods.id), eq(servings.isDefault, true)),
-    )
-    .innerJoin(
-      foodNutrientValues,
-      eq(foodNutrientValues.servingId, servings.id),
-    )
-    .orderBy(asc(foods.name));
-}
-
 export async function getFoodsPageData({
   query = "",
   source = "all",
+  userId,
 }: {
   query?: string;
   source?: "all" | "manual" | "verified" | "provisional";
+  userId?: string;
 } = {}) {
+  const [options, aliases] = await Promise.all([
+    getFoodSearchOptions({ query, source, userId }),
+    getFoodAliasesByFood(),
+  ]);
+  const byFood = new Map<string, (typeof options)[number] & { servings: FoodServingOption[] }>();
+
+  for (const option of options) {
+    const existing = byFood.get(option.foodId);
+    if (existing) {
+      existing.servings.push(toServingOption(option));
+      continue;
+    }
+
+    byFood.set(option.foodId, {
+      ...option,
+      aliases: aliases.get(option.foodId) ?? [],
+      servingOptionsText: formatServingOptionsInput(
+        options
+          .filter((serving) => serving.foodId === option.foodId)
+          .map(toServingOption),
+      ),
+      servings: [toServingOption(option)],
+    });
+  }
+
+  return Array.from(byFood.values());
+}
+
+export async function getFoodOptions(userId?: string) {
+  return getFoodSearchOptions({ userId });
+}
+
+export async function getFoodSearchOptions({
+  query = "",
+  source = "all",
+  userId,
+}: {
+  query?: string;
+  source?: "all" | "manual" | "verified" | "provisional";
+  userId?: string;
+} = {}) {
+  const rows = await getFoodSearchRows({ query, userId });
+  const mapped = rows
+    .filter((food) => foodSourceMatches(food, source))
+    .map(mapFoodSearchRow)
+    .filter((food): food is FoodSearchOption => food !== null);
+
+  return rankFoodSearchResults(
+    query,
+    mapped.map((food) => ({
+      ...food,
+      id: `${food.foodId}|${food.servingId}`,
+    })),
+  );
+}
+
+type FoodSearchDbRow = {
+  foodId: string;
+  name: string;
+  brand: string | null;
+  foodType: string;
+  confidenceStatus: string;
+  servingId: string;
+  servingLabel: string;
+  grams: number | null;
+  millilitres: number | null;
+  isDefault: boolean;
+  baseServingId: string;
+  baseGrams: number | null;
+  baseMillilitres: number | null;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fibreG: number | null;
+  sugarG: number | null;
+  sodiumMg: number | null;
+  aliasText: string;
+  isFavorite: boolean;
+  lastLoggedAt: Date | string | null;
+  similarity: number;
+};
+
+type FoodServingOption = {
+  servingId: string;
+  label: string;
+  servingLabel: string;
+  grams: number | null;
+  millilitres: number | null;
+  isDefault: boolean;
+};
+
+type FoodSearchOption = {
+  foodId: string;
+  name: string;
+  brand: string | null;
+  foodType: string;
+  confidenceStatus: string;
+  servingId: string;
+  servingLabel: string;
+  grams: number | null;
+  millilitres: number | null;
+  isDefault: boolean;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fibreG: number | null;
+  sugarG: number | null;
+  sodiumMg: number | null;
+  aliasText: string;
+  aliases?: string[];
+  servingOptionsText?: string;
+  isFavorite: boolean;
+  lastLoggedAt: Date | string | null;
+  similarity: number;
+};
+
+async function getFoodSearchRows({
+  query,
+  userId,
+}: {
+  query: string;
+  userId?: string;
+}) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const likeQuery = `%${normalizedQuery}%`;
+  const rows = await getDb().execute(sql<FoodSearchDbRow>`
+    WITH recent AS (
+      SELECT food_id, serving_id, max(logged_at) AS last_logged_at
+      FROM food_logs
+      WHERE ${userId ?? null}::uuid IS NOT NULL
+        AND user_id = ${userId ?? null}::uuid
+        AND food_id IS NOT NULL
+        AND serving_id IS NOT NULL
+      GROUP BY food_id, serving_id
+    ),
+    alias_rollup AS (
+      SELECT food_id, string_agg(alias, ' ') AS alias_text
+      FROM food_aliases
+      GROUP BY food_id
+    )
+    SELECT
+      f.id::text AS "foodId",
+      f.name AS "name",
+      f.brand AS "brand",
+      f.food_type AS "foodType",
+      f.confidence_status AS "confidenceStatus",
+      s.id::text AS "servingId",
+      s.label AS "servingLabel",
+      s.grams AS "grams",
+      s.millilitres AS "millilitres",
+      s.is_default AS "isDefault",
+      bs.id::text AS "baseServingId",
+      bs.grams AS "baseGrams",
+      bs.millilitres AS "baseMillilitres",
+      n.calories AS "calories",
+      n.protein_g AS "proteinG",
+      n.carbs_g AS "carbsG",
+      n.fat_g AS "fatG",
+      n.fibre_g AS "fibreG",
+      n.sugar_g AS "sugarG",
+      n.sodium_mg AS "sodiumMg",
+      coalesce(a.alias_text, '') AS "aliasText",
+      ff.id IS NOT NULL AS "isFavorite",
+      recent.last_logged_at AS "lastLoggedAt",
+      greatest(
+        similarity(lower(f.name), ${normalizedQuery}),
+        similarity(coalesce(lower(f.brand), ''), ${normalizedQuery}),
+        similarity(coalesce(lower(a.alias_text), ''), ${normalizedQuery})
+      ) AS "similarity"
+    FROM foods f
+    INNER JOIN servings s ON s.food_id = f.id
+    INNER JOIN servings bs ON bs.food_id = f.id AND bs.is_default = true
+    INNER JOIN food_nutrient_values n ON n.serving_id = bs.id
+    LEFT JOIN alias_rollup a ON a.food_id = f.id
+    LEFT JOIN food_favorites ff ON ff.food_id = f.id AND ff.serving_id = s.id
+    LEFT JOIN recent ON recent.food_id = f.id AND recent.serving_id = s.id
+    WHERE ${normalizedQuery} = ''
+      OR lower(f.name) LIKE ${likeQuery}
+      OR coalesce(lower(f.brand), '') LIKE ${likeQuery}
+      OR coalesce(lower(a.alias_text), '') LIKE ${likeQuery}
+      OR lower(f.name) % ${normalizedQuery}
+      OR coalesce(lower(f.brand), '') % ${normalizedQuery}
+      OR coalesce(lower(a.alias_text), '') % ${normalizedQuery}
+    ORDER BY ff.id IS NOT NULL DESC,
+      recent.last_logged_at DESC NULLS LAST,
+      "similarity" DESC,
+      f.name ASC,
+      s.is_default DESC,
+      s.label ASC
+    LIMIT 200
+  `);
+
+  return Array.from(rows) as FoodSearchDbRow[];
+}
+
+async function getFoodAliasesByFood() {
   const rows = await getDb()
     .select({
-      foodId: foods.id,
-      name: foods.name,
-      brand: foods.brand,
-      foodType: foods.foodType,
-      confidenceStatus: foods.confidenceStatus,
-      servingId: servings.id,
-      servingLabel: servings.label,
-      grams: servings.grams,
-      millilitres: servings.millilitres,
-      calories: foodNutrientValues.calories,
-      proteinG: foodNutrientValues.proteinG,
-      carbsG: foodNutrientValues.carbsG,
-      fatG: foodNutrientValues.fatG,
-      fibreG: foodNutrientValues.fibreG,
-      sugarG: foodNutrientValues.sugarG,
-      sodiumMg: foodNutrientValues.sodiumMg,
+      foodId: foodAliases.foodId,
+      alias: foodAliases.alias,
     })
-    .from(foods)
-    .innerJoin(
-      servings,
-      and(eq(servings.foodId, foods.id), eq(servings.isDefault, true)),
-    )
-    .innerJoin(
-      foodNutrientValues,
-      eq(foodNutrientValues.servingId, servings.id),
-    )
-    .orderBy(asc(foods.name));
+    .from(foodAliases)
+    .orderBy(asc(foodAliases.alias));
+  const byFood = new Map<string, string[]>();
 
-  const normalizedQuery = query.trim().toLowerCase();
+  for (const row of rows) {
+    const aliases = byFood.get(row.foodId) ?? [];
+    aliases.push(row.alias);
+    byFood.set(row.foodId, aliases);
+  }
 
-  return rows.filter((food) => {
-    const matchesQuery =
-      !normalizedQuery ||
-      food.name.toLowerCase().includes(normalizedQuery) ||
-      (food.brand?.toLowerCase().includes(normalizedQuery) ?? false);
+  return byFood;
+}
 
-    if (!matchesQuery) return false;
+function mapFoodSearchRow(row: FoodSearchDbRow): FoodSearchOption | null {
+  const scaled = scaleNutrientsForServing(
+    {
+      calories: Number(row.calories),
+      proteinG: Number(row.proteinG),
+      carbsG: Number(row.carbsG),
+      fatG: Number(row.fatG),
+      fibreG: row.fibreG === null ? null : Number(row.fibreG),
+      sugarG: row.sugarG === null ? null : Number(row.sugarG),
+      sodiumMg: row.sodiumMg === null ? null : Number(row.sodiumMg),
+    },
+    {
+      baseServing: {
+        id: row.baseServingId,
+        isDefault: true,
+        grams: row.baseGrams === null ? null : Number(row.baseGrams),
+        millilitres:
+          row.baseMillilitres === null ? null : Number(row.baseMillilitres),
+      },
+      selectedServing: {
+        id: row.servingId,
+        isDefault: row.isDefault,
+        grams: row.grams === null ? null : Number(row.grams),
+        millilitres: row.millilitres === null ? null : Number(row.millilitres),
+      },
+      quantity: 1,
+    },
+  );
 
-    if (source === "manual") {
-      return food.foodType === "manual" || food.confidenceStatus === "manual";
-    }
+  if (!scaled) return null;
 
-    if (source === "verified") {
-      return (
-        food.confidenceStatus === "verified" ||
-        food.confidenceStatus === "imported"
-      );
-    }
+  return {
+    foodId: row.foodId,
+    name: row.name,
+    brand: row.brand,
+    foodType: row.foodType,
+    confidenceStatus: row.confidenceStatus,
+    servingId: row.servingId,
+    servingLabel: row.servingLabel,
+    grams: row.grams === null ? null : Number(row.grams),
+    millilitres: row.millilitres === null ? null : Number(row.millilitres),
+    isDefault: row.isDefault,
+    calories: scaled.calories,
+    proteinG: scaled.proteinG,
+    carbsG: scaled.carbsG,
+    fatG: scaled.fatG,
+    fibreG: scaled.fibreG ?? null,
+    sugarG: scaled.sugarG ?? null,
+    sodiumMg: scaled.sodiumMg ?? null,
+    aliasText: row.aliasText,
+    isFavorite: row.isFavorite,
+    lastLoggedAt: row.lastLoggedAt,
+    similarity: Number(row.similarity ?? 0),
+  };
+}
 
-    if (source === "provisional") {
-      return (
-        food.confidenceStatus === "provisional" ||
-        food.confidenceStatus === "ocr_draft"
-      );
-    }
+function toServingOption(food: FoodSearchOption): FoodServingOption {
+  return {
+    servingId: food.servingId,
+    label: food.servingLabel,
+    servingLabel: food.servingLabel,
+    grams: food.grams,
+    millilitres: food.millilitres,
+    isDefault: food.isDefault,
+  };
+}
 
-    return true;
-  });
+function foodSourceMatches(
+  food: FoodSearchDbRow,
+  source: "all" | "manual" | "verified" | "provisional",
+) {
+  if (source === "manual") {
+    return food.foodType === "manual" || food.confidenceStatus === "manual";
+  }
+
+  if (source === "verified") {
+    return (
+      food.confidenceStatus === "verified" ||
+      food.confidenceStatus === "imported"
+    );
+  }
+
+  if (source === "provisional") {
+    return (
+      food.confidenceStatus === "provisional" ||
+      food.confidenceStatus === "ocr_draft"
+    );
+  }
+
+  return true;
 }
 
 export async function getFoodLogPageData(
@@ -182,7 +414,7 @@ export async function getFoodLogPageData(
 ) {
   const selectedDate = normalizeDateInputValue(date);
   const [foodOptions, logs, recentRows] = await Promise.all([
-    getFoodOptions(),
+    getFoodOptions(userId),
     getDb()
       .select()
       .from(foodLogs)
@@ -288,16 +520,108 @@ export async function getFoodAddPageData({
 }) {
   const selectedDate = normalizeDateInputValue(date);
   const selectedMeal = normalizeMealType(mealType);
-  const [foodOptions, savedMealRows] = await Promise.all([
-    getFoodsPageData({ query, source: "all" }),
-    getSavedMealsWithItems(userId),
-  ]);
+  const yesterdayDate = toDateInputValue(
+    subDays(parseDateInputValue(selectedDate), 1),
+  );
+  const [foodOptions, savedMealRows, copySources, yesterdayMeal] =
+    await Promise.all([
+      getFoodSearchOptions({ query, source: "all", userId }),
+      getSavedMealsWithItems(userId),
+      getMealCopySources({
+        userId,
+        selectedDate,
+        selectedMeal,
+      }),
+      getMealSummaryForCopy({
+        userId,
+        sourceDate: yesterdayDate,
+        sourceMeal: selectedMeal,
+      }),
+    ]);
 
   return {
     date: selectedDate,
     mealType: selectedMeal,
     foodOptions,
     savedMeals: savedMealRows,
+    copySources,
+    yesterdayMeal,
+  };
+}
+
+async function getMealCopySources({
+  userId,
+  selectedDate,
+  selectedMeal,
+}: {
+  userId: string;
+  selectedDate: string;
+  selectedMeal: MealType;
+}) {
+  const rows = await getDb()
+    .select({
+      sourceDate: foodLogs.logDate,
+      mealType: foodLogs.mealType,
+      itemCount: count(foodLogs.id),
+      calories: sql<number>`coalesce(sum(${foodLogs.caloriesSnapshot}), 0)`,
+      lastLoggedAt: sql<Date>`max(${foodLogs.loggedAt})`,
+    })
+    .from(foodLogs)
+    .where(
+      and(
+        eq(foodLogs.userId, userId),
+        sql`(${foodLogs.logDate} <> ${selectedDate} OR ${foodLogs.mealType} <> ${selectedMeal})`,
+      ),
+    )
+    .groupBy(foodLogs.logDate, foodLogs.mealType)
+    .orderBy(sql`max(${foodLogs.loggedAt}) DESC`)
+    .limit(8);
+
+  return rows.map((row) => ({
+    sourceDate: row.sourceDate,
+    mealType: normalizeMealType(row.mealType),
+    itemCount: Number(row.itemCount),
+    calories: Number(row.calories),
+    lastLoggedAt: row.lastLoggedAt,
+  }));
+}
+
+async function getMealSummaryForCopy({
+  userId,
+  sourceDate,
+  sourceMeal,
+}: {
+  userId: string;
+  sourceDate: string;
+  sourceMeal: MealType;
+}) {
+  const [row] = await getDb()
+    .select({
+      sourceDate: foodLogs.logDate,
+      mealType: foodLogs.mealType,
+      itemCount: count(foodLogs.id),
+      calories: sql<number>`coalesce(sum(${foodLogs.caloriesSnapshot}), 0)`,
+      lastLoggedAt: sql<Date>`max(${foodLogs.loggedAt})`,
+    })
+    .from(foodLogs)
+    .where(
+      and(
+        eq(foodLogs.userId, userId),
+        eq(foodLogs.logDate, sourceDate),
+        eq(foodLogs.mealType, sourceMeal),
+      ),
+    )
+    .groupBy(foodLogs.logDate, foodLogs.mealType)
+    .limit(1);
+
+  if (!row) return null;
+
+  return {
+    sourceDate: row.sourceDate,
+    mealType: normalizeMealType(row.mealType),
+    itemCount: Number(row.itemCount),
+    calories: Number(row.calories),
+    lastLoggedAt: row.lastLoggedAt,
   };
 }
 
@@ -694,12 +1018,13 @@ export async function getTrendData(userId: string, heightCm: number | null) {
 }
 
 export async function getSavedMealsWithItems(userId: string) {
+  const baseServings = alias(servings, "saved_meal_base_servings");
   const [meals, items] = await Promise.all([
     getDb()
       .select()
       .from(savedMeals)
       .where(eq(savedMeals.userId, userId))
-      .orderBy(desc(savedMeals.updatedAt)),
+      .orderBy(desc(savedMeals.isFavorite), desc(savedMeals.updatedAt)),
     getDb()
       .select({
         savedMealId: savedMealItems.savedMealId,
@@ -708,6 +1033,12 @@ export async function getSavedMealsWithItems(userId: string) {
         brand: foods.brand,
         servingId: servings.id,
         servingLabel: servings.label,
+        servingIsDefault: servings.isDefault,
+        servingGrams: servings.grams,
+        servingMillilitres: servings.millilitres,
+        baseServingId: baseServings.id,
+        baseServingGrams: baseServings.grams,
+        baseServingMillilitres: baseServings.millilitres,
         quantity: savedMealItems.quantity,
         calories: foodNutrientValues.calories,
         proteinG: foodNutrientValues.proteinG,
@@ -722,14 +1053,58 @@ export async function getSavedMealsWithItems(userId: string) {
       .innerJoin(foods, eq(savedMealItems.foodId, foods.id))
       .innerJoin(servings, eq(savedMealItems.servingId, servings.id))
       .innerJoin(
+        baseServings,
+        and(eq(baseServings.foodId, foods.id), eq(baseServings.isDefault, true)),
+      )
+      .innerJoin(
         foodNutrientValues,
-        eq(foodNutrientValues.servingId, savedMealItems.servingId),
+        eq(foodNutrientValues.servingId, baseServings.id),
       )
       .where(eq(savedMeals.userId, userId)),
   ]);
 
   return meals.map((meal) => {
-    const mealItems = items.filter((item) => item.savedMealId === meal.id);
+    const mealItems = items
+      .filter((item) => item.savedMealId === meal.id)
+      .map((item) => {
+        const scaled = scaleNutrientsForServing(
+          {
+            calories: item.calories,
+            proteinG: item.proteinG,
+            carbsG: item.carbsG,
+            fatG: item.fatG,
+            fibreG: item.fibreG,
+            sugarG: item.sugarG,
+            sodiumMg: item.sodiumMg,
+          },
+          {
+            baseServing: {
+              id: item.baseServingId,
+              isDefault: true,
+              grams: item.baseServingGrams,
+              millilitres: item.baseServingMillilitres,
+            },
+            selectedServing: {
+              id: item.servingId,
+              isDefault: item.servingIsDefault,
+              grams: item.servingGrams,
+              millilitres: item.servingMillilitres,
+            },
+            quantity: 1,
+          },
+        );
+
+        return {
+          ...item,
+          calories: scaled?.calories ?? 0,
+          proteinG: scaled?.proteinG ?? 0,
+          carbsG: scaled?.carbsG ?? 0,
+          fatG: scaled?.fatG ?? 0,
+          fibreG: scaled?.fibreG ?? null,
+          sugarG: scaled?.sugarG ?? null,
+          sodiumMg: scaled?.sodiumMg ?? null,
+        };
+      });
     return {
       ...meal,
       mealType: meal.mealType ? normalizeMealType(meal.mealType) : null,

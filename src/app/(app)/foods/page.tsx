@@ -18,13 +18,13 @@ export default async function FoodsPage({
     saved?: string;
   }>;
 }) {
-  await requireUser();
+  const user = await requireUser();
   const params = await searchParams;
   const query = params.q ?? "";
   const source = sources.includes(params.source as (typeof sources)[number])
     ? (params.source as (typeof sources)[number])
     : "all";
-  const foods = await getFoodsPageData({ query, source });
+  const foods = await getFoodsPageData({ query, source, userId: user.id });
 
   return (
     <div className="space-y-5">
@@ -63,6 +63,14 @@ export default async function FoodsPage({
             <Field label="Brand">
               <input name="brand" className="field" />
             </Field>
+            <Field label="Aliases">
+              <textarea
+                name="aliases"
+                rows={2}
+                className="field min-h-20"
+                placeholder="yogurt, yoghurt, breakfast oats"
+              />
+            </Field>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Field label="Serving label">
                 <input name="servingLabel" defaultValue="1 serving" required className="field" />
@@ -80,6 +88,14 @@ export default async function FoodsPage({
                 />
               </Field>
             </div>
+            <Field label="Additional servings">
+              <textarea
+                name="servingOptions"
+                rows={3}
+                className="field min-h-24"
+                placeholder={"1 cup, 240g\nLarge bowl, 480ml\n1 oz, 28.35g"}
+              />
+            </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Calories">
                 <input

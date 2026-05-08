@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Barcode, Camera, Mic, Search } from "lucide-react";
 
+import { copyLoggedMealAction } from "@/app/actions";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { FormMessage } from "@/components/form-message";
 import { FoodSearchResult } from "@/components/tracking/FoodSearchResult";
 import { SavedMealCard } from "@/components/tracking/SavedMealCard";
 import { TrackingPageShell } from "@/components/tracking/TrackingPageShell";
@@ -11,13 +13,21 @@ import {
 } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth/session";
 import { formatMealLabel } from "@/lib/tracking";
+import { formatNumber } from "@/lib/units";
 
 export default async function AddFoodPage({
   params,
   searchParams,
 }: {
   params: Promise<{ mealType: string }>;
-  searchParams: Promise<{ date?: string; q?: string; tab?: string }>;
+  searchParams: Promise<{
+    date?: string;
+    q?: string;
+    tab?: string;
+    error?: string;
+    saved?: string;
+    skipped?: string;
+  }>;
 }) {
   const user = await requireUser();
   const [{ mealType }, query] = await Promise.all([params, searchParams]);
@@ -31,9 +41,18 @@ export default async function AddFoodPage({
     getMealReviewPageData(user.id, mealType, query.date),
   ]);
   const activeTab = query.tab === "my-meals" ? "my-meals" : "all-foods";
-  const returnTo = `/log/${data.mealType}/add?date=${data.date}${
-    query.q ? `&q=${encodeURIComponent(query.q)}` : ""
-  }`;
+  const returnToParams = new URLSearchParams({ date: data.date });
+  if (activeTab === "my-meals") returnToParams.set("tab", "my-meals");
+  if (query.q) returnToParams.set("q", query.q);
+  const returnTo = `/log/${data.mealType}/add?${returnToParams.toString()}`;
+  const copySources = data.copySources.filter(
+    (source) =>
+      !(
+        data.yesterdayMeal &&
+        source.sourceDate === data.yesterdayMeal.sourceDate &&
+        source.mealType === data.yesterdayMeal.mealType
+      ),
+  );
 
   return (
     <TrackingPageShell
@@ -53,6 +72,18 @@ export default async function AddFoodPage({
         </Link>
       }
     >
+      <FormMessage
+        error={query.error}
+        saved={query.saved}
+        savedText={query.saved === "copy" ? "Copied." : "Saved."}
+      />
+      {query.skipped ? (
+        <p className="rounded-2xl border border-[var(--brand-coral)]/30 bg-[var(--brand-coral)]/10 px-3 py-2 text-sm font-bold text-[var(--brand-coral)]">
+          {query.skipped} item{query.skipped === "1" ? "" : "s"} skipped because
+          current food data was unavailable.
+        </p>
+      ) : null}
+
       <div className="grid grid-cols-2 border-b border-[var(--brand-line)]">
         <TabLink
           href={`/log/${data.mealType}/add?date=${data.date}${query.q ? `&q=${encodeURIComponent(query.q)}` : ""}`}
@@ -98,7 +129,40 @@ export default async function AddFoodPage({
 
       {activeTab === "my-meals" ? (
         <section className="space-y-3">
-          {data.savedMeals.length === 0 ? (
+          {data.yesterdayMeal ? (
+            <CopyMealCard
+              title="Copy yesterday"
+              summary={`${data.yesterdayMeal.itemCount} item${
+                data.yesterdayMeal.itemCount === 1 ? "" : "s"
+              } · ${formatNumber(data.yesterdayMeal.calories, 0)} cal`}
+              sourceDate={data.yesterdayMeal.sourceDate}
+              sourceMealType={data.yesterdayMeal.mealType}
+              date={data.date}
+              mealType={data.mealType}
+              returnTo={returnTo}
+            />
+          ) : null}
+
+          {copySources.length > 0 ? (
+            <div className="space-y-2">
+              {copySources.map((source) => (
+                <CopyMealCard
+                  key={`${source.sourceDate}-${source.mealType}`}
+                  title={`${formatMealLabel(source.mealType)} · ${source.sourceDate}`}
+                  summary={`${source.itemCount} item${
+                    source.itemCount === 1 ? "" : "s"
+                  } · ${formatNumber(source.calories, 0)} cal`}
+                  sourceDate={source.sourceDate}
+                  sourceMealType={source.mealType}
+                  date={data.date}
+                  mealType={data.mealType}
+                  returnTo={returnTo}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          {data.savedMeals.length === 0 && !data.yesterdayMeal && copySources.length === 0 ? (
             <div className="hp-card p-5 text-center">
               <h2 className="text-xl font-extrabold text-[var(--brand-ink)]">
                 No saved meals yet
@@ -142,6 +206,45 @@ export default async function AddFoodPage({
         </>
       )}
     </TrackingPageShell>
+  );
+}
+
+function CopyMealCard({
+  title,
+  summary,
+  sourceDate,
+  sourceMealType,
+  date,
+  mealType,
+  returnTo,
+}: {
+  title: string;
+  summary: string;
+  sourceDate: string;
+  sourceMealType: string;
+  date: string;
+  mealType: string;
+  returnTo: string;
+}) {
+  return (
+    <article className="hp-card grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-4">
+      <div className="min-w-0">
+        <h2 className="break-words text-lg font-extrabold text-[var(--brand-ink)]">
+          {title}
+        </h2>
+        <p className="text-sm font-medium text-[var(--brand-muted)]">{summary}</p>
+      </div>
+      <form action={copyLoggedMealAction}>
+        <input type="hidden" name="sourceDate" value={sourceDate} />
+        <input type="hidden" name="sourceMealType" value={sourceMealType} />
+        <input type="hidden" name="logDate" value={date} />
+        <input type="hidden" name="mealType" value={mealType} />
+        <input type="hidden" name="returnTo" value={returnTo} />
+        <button type="submit" className="secondary-button">
+          Copy
+        </button>
+      </form>
+    </article>
   );
 }
 

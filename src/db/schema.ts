@@ -222,6 +222,24 @@ export const foods = pgTable(
   ],
 );
 
+export const foodAliases = pgTable(
+  "food_aliases",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    foodId: uuid("food_id")
+      .notNull()
+      .references(() => foods.id, { onDelete: "cascade" }),
+    alias: varchar("alias", { length: 160 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("food_aliases_food_alias_unique").on(table.foodId, table.alias),
+    index("food_aliases_alias_idx").on(table.alias),
+  ],
+);
+
 export const servings = pgTable(
   "servings",
   {
@@ -238,6 +256,30 @@ export const servings = pgTable(
       .notNull(),
   },
   (table) => [index("servings_food_id_idx").on(table.foodId)],
+);
+
+export const foodFavorites = pgTable(
+  "food_favorites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    foodId: uuid("food_id")
+      .notNull()
+      .references(() => foods.id, { onDelete: "cascade" }),
+    servingId: uuid("serving_id")
+      .notNull()
+      .references(() => servings.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("food_favorites_food_serving_unique").on(
+      table.foodId,
+      table.servingId,
+    ),
+    index("food_favorites_food_id_idx").on(table.foodId),
+    index("food_favorites_serving_id_idx").on(table.servingId),
+  ],
 );
 
 export const foodNutrientValues = pgTable(
@@ -481,6 +523,7 @@ export const savedMeals = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 220 }).notNull(),
     mealType: mealTypeEnum("meal_type"),
+    isFavorite: boolean("is_favorite").default(false).notNull(),
     notes: text("notes"),
     ...timestamps,
   },
