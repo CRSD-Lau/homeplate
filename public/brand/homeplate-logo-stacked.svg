@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">HomePlate app icon</title>
-  <desc id="desc">Square app icon for HomePlate Health and Nutrition.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">HomePlate Health and Nutrition stacked logo</title>
+  <desc id="desc">Stacked HomePlate Health and Nutrition logo with heart, home plate, and leaf mark.</desc>
   <defs>
+
   </defs>
 
-  <rect width="512" height="512" fill="#FFFFFF"/>
-<g transform="translate(36 36) scale(0.86)"><g id="homeplate-mark" stroke-linecap="round" stroke-linejoin="round">
+
+<g transform="translate(342 38) scale(1.01)"><g id="homeplate-mark" stroke-linecap="round" stroke-linejoin="round">
   <path d="M256 420 C216 383 171 346 135 306 C92 258 78 210 94 162 C111 113 151 86 195 88 C226 90 246 108 256 133 C266 108 286 90 317 88 C361 86 401 113 418 162 C434 210 420 258 377 306 C341 346 296 383 256 420 Z"
         fill="none" stroke="#0B1F3A" stroke-width="24"/>
   <path d="M194 192 L318 192 L318 302 L256 358 L194 302 Z"
@@ -16,4 +17,7 @@
   <path d="M302 374 C326 337 359 300 406 267" fill="none" stroke="#FFFFFF" stroke-width="12"/>
   <path d="M338 334 C326 333 317 333 307 336" fill="none" stroke="#FFFFFF" stroke-width="6" opacity="0.8"/>
 </g></g>
+<text x="600" y="688" text-anchor="middle" font-family="Inter Display, Inter, Arial, sans-serif" font-weight="800" font-size="108" letter-spacing="-5" fill="#0B1F3A">HomePlate</text>
+<text x="600" y="758" text-anchor="middle" font-family="Inter Display, Inter, Arial, sans-serif" font-weight="700" font-size="34" letter-spacing="6" fill="#3F8F3A">HEALTH AND NUTRITION</text>
+
 </svg>

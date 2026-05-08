@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./homeplate-logo-assets/readme/homeplate-readme-banner.svg" alt="HomePlate Health and Nutrition" width="420" />
+</p>
+
 # HomePlate
 
 HomePlate is a private household nutrition, body, and wellness tracker for Neil and Allison. It is built as an installable mobile-first PWA for day-to-day food logging, weight, water, exercise, blood pressure, blood glucose, and simple trend visibility.
@@ -10,7 +14,7 @@ This is not a public SaaS, not a commercial food database, not a subscription pr
 
 ## Current Phase
 
-Phase 1 MVP foundation is complete and released as `v0.1.0`. Active product work is moving into Phase 2A, which focuses on faster day-to-day food logging, better search, serving conversions, aliases, and copy helpers. Larger data integrations remain deferred until the core mobile logging flow feels quick enough for daily use.
+Phase 1 MVP foundation is complete and released as `v0.1.0`. Phase 2A logging speed work is implemented. Active product work is moving into Phase 2B, which focuses on bootstrapping a useful food database from Open Food Facts, preserving product label serving sizes, and adding manual barcode lookup before camera scanning.
 
 - Next.js 16 App Router, TypeScript, Tailwind
 - PostgreSQL with Drizzle ORM

@@ -2,19 +2,23 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "HomePlate",
+    name: "HomePlate Health and Nutrition",
     short_name: "HomePlate",
     description: "Private household nutrition, body, and wellness tracker.",
     start_url: "/dashboard",
     display: "standalone",
-    background_color: "#f7faf8",
-    theme_color: "#256f5b",
+    background_color: "#FFFFFF",
+    theme_color: "#0B1F3A",
     icons: [
       {
-        src: "/icon.svg",
-        sizes: "any",
-        type: "image/svg+xml",
-        purpose: "maskable",
+        src: "/android-chrome-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        src: "/android-chrome-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
       },
     ],
   };

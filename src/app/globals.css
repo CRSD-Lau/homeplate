@@ -3,6 +3,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  --homeplate-navy: #0b1f3a;
+  --homeplate-green: #3f8f3a;
+  --homeplate-white: #ffffff;
   --brand-teal: #007c80;
   --brand-teal-light: #6fc8c1;
   --brand-coral: #ff5546;

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="320" viewBox="0 0 980 320" role="img" aria-labelledby="title desc">
+  <title id="title">HomePlate Health and Nutrition wordmark</title>
+  <desc id="desc">HomePlate Health and Nutrition wordmark.</desc>
+  <defs>
+
+  </defs>
+
+
+<text x="40" y="170" font-family="Inter Display, Inter, Arial, sans-serif" font-weight="800" font-size="150" letter-spacing="-7" fill="#0B1F3A">HomePlate</text>
+<text x="45" y="245" font-family="Inter Display, Inter, Arial, sans-serif" font-weight="700" font-size="42" letter-spacing="7" fill="#3F8F3A">HEALTH AND NUTRITION</text>
+
+</svg>

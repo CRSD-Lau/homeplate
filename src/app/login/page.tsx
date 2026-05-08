@@ -1,4 +1,4 @@
-import { Utensils } from "lucide-react";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import { FormMessage } from "@/components/form-message";
@@ -18,16 +18,28 @@ export default async function LoginPage({
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4 py-10">
       <section className="hp-card-lg w-full max-w-sm p-6">
-        <div className="mb-8 flex items-center gap-3">
-          <span className="hp-icon-chip bg-[var(--brand-teal)]">
-            <Utensils aria-hidden="true" size={22} />
-          </span>
-          <div>
-            <h1 className="hp-display text-2xl">HomePlate</h1>
-            <p className="text-sm font-medium text-[var(--brand-muted)]">
-              Private household login
-            </p>
-          </div>
+        <div className="mb-8 text-center">
+          <Image
+            src="/brand/homeplate-logo-stacked.svg"
+            alt="HomePlate Health and Nutrition"
+            width={1200}
+            height={900}
+            priority
+            unoptimized
+            className="mx-auto block h-auto w-44 max-w-full select-none dark:hidden"
+          />
+          <Image
+            src="/brand/homeplate-logo-stacked-outlined.svg"
+            alt="HomePlate Health and Nutrition"
+            width={1200}
+            height={900}
+            priority
+            unoptimized
+            className="mx-auto hidden h-auto w-44 max-w-full select-none dark:block"
+          />
+          <p className="mt-3 text-sm font-medium text-[var(--brand-muted)]">
+            Private household login
+          </p>
         </div>
 
         <FormMessage error={error} />

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, type TouchEvent } from "react";
 
 import { BottomNav } from "@/components/app/BottomNav";
@@ -63,12 +64,24 @@ export function AppChrome({
               />
             </button>
             <span className="min-w-0">
-              <span className="block truncate text-2xl font-extrabold tracking-normal text-[var(--brand-ink)]">
-                HomePlate
-              </span>
-              <span className="block truncate text-sm font-medium text-[var(--brand-muted)]">
-                Private household tracker
-              </span>
+              <Image
+                src="/brand/homeplate-logo-horizontal.svg"
+                alt="HomePlate Health and Nutrition"
+                width={1600}
+                height={520}
+                priority
+                unoptimized
+                className="block h-auto w-36 max-w-[48vw] select-none dark:hidden sm:w-44"
+              />
+              <Image
+                src="/brand/homeplate-logo-horizontal-outlined.svg"
+                alt="HomePlate Health and Nutrition"
+                width={1600}
+                height={520}
+                priority
+                unoptimized
+                className="hidden h-auto w-36 max-w-[48vw] select-none dark:block sm:w-44"
+              />
             </span>
           </div>
 

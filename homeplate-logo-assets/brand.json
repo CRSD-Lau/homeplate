@@ -1,0 +1,14 @@
+{
+  "brand": "HomePlate Health and Nutrition",
+  "primary": {
+    "navy": "#0B1F3A",
+    "green": "#3F8F3A",
+    "white": "#FFFFFF"
+  },
+  "recommended_use": {
+    "app_icon": "app/ios/AppIcon.appiconset or app/android/mipmap-*; use svg/homeplate-app-icon.svg as the source",
+    "readme": "readme/homeplate-readme-banner.svg or readme/homeplate-readme-banner.png",
+    "web_favicon": "favicon/favicon.ico and favicon/site.webmanifest",
+    "source_vectors": "svg/homeplate-mark.svg, svg/homeplate-logo-stacked.svg, svg/homeplate-logo-horizontal.svg"
+  }
+}
