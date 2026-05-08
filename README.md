@@ -10,9 +10,9 @@ This is not a public SaaS, not a commercial food database, not a subscription pr
 
 ## Current Phase
 
-Phase 1 MVP foundation is complete and released as `v0.1.0`.
+Phase 1 MVP foundation is complete and released as `v0.1.0`. Active product work is moving into Phase 2A, which focuses on faster day-to-day food logging, better search, serving conversions, aliases, and copy helpers. Larger data integrations remain deferred until the core mobile logging flow feels quick enough for daily use.
 
-- Next.js App Router, TypeScript, Tailwind
+- Next.js 16 App Router, TypeScript, Tailwind
 - PostgreSQL with Drizzle ORM
 - Docker Compose local database
 - Private credentials auth
@@ -28,8 +28,6 @@ Phase 1 MVP foundation is complete and released as `v0.1.0`.
 - Core unit/nutrition/BMI tests
 
 Not implemented yet: CNF full import, Open Food Facts, barcode scanning, OCR, export files, native apps, or admin cleanup workflows.
-
-Next planned release: `v0.1.1` UI and design makeover only. New non-Phase-1 features are intentionally deferred until the app feels right on phone screens.
 
 ## Required Tools
 
