@@ -21,6 +21,7 @@ export default async function FoodsPage({
   const user = await requireUser();
   const params = await searchParams;
   const query = params.q ?? "";
+  const hasQuery = query.trim().length > 0;
   const source = sources.includes(params.source as (typeof sources)[number])
     ? (params.source as (typeof sources)[number])
     : "all";
@@ -31,7 +32,7 @@ export default async function FoodsPage({
       <div>
         <h1 className="hp-display text-3xl md:text-4xl">Foods</h1>
         <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-[var(--brand-muted)]">
-          Search, create, edit, and log household foods without desktop tables.
+          Manage manual household foods when logging search or barcode lookup cannot find what you need.
         </p>
       </div>
 
@@ -43,7 +44,7 @@ export default async function FoodsPage({
 
       <FoodSearch query={query} source={source} />
 
-      <section className="hp-card-lg p-4">
+      <section id="manual-food" className="hp-card-lg scroll-mt-24 p-4">
         <details>
           <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3">
             <span>
@@ -157,16 +158,23 @@ export default async function FoodsPage({
       <section className="space-y-3">
         <div className="flex items-end justify-between gap-3">
           <h2 className="text-2xl font-extrabold tracking-normal text-[var(--brand-ink)]">
-            Food library
+            Search results
           </h2>
-          <p className="text-sm font-bold text-[var(--brand-muted)]">
-            {foods.length} food{foods.length === 1 ? "" : "s"}
-          </p>
+          {hasQuery ? (
+            <p className="text-sm font-bold text-[var(--brand-muted)]">
+              {foods.length} food{foods.length === 1 ? "" : "s"}
+            </p>
+          ) : null}
         </div>
-        {foods.length === 0 ? (
+        {!hasQuery ? (
           <EmptyState
-            title="No foods match this view."
-            description="Try a different search or add a manual food."
+            title="Search or create a manual food."
+            description="This page is for managing foods that are not easy to find while logging."
+          />
+        ) : foods.length === 0 ? (
+          <EmptyState
+            title="No foods match this search."
+            description="Use the manual food form above if this is a private household food."
           />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
