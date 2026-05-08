@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import type { TouchEvent } from "react";
 import {
   Activity,
-  Apple,
   BarChart3,
   Download,
   Droplets,
@@ -26,7 +25,6 @@ import type { CurrentUser } from "@/lib/auth/session";
 const mainItems = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
   { href: "/log", label: "Food Log", icon: Pencil },
-  { href: "/foods", label: "Foods", icon: Apple },
   { href: "/weight", label: "Weight", icon: Weight },
   { href: "/water", label: "Water", icon: Droplets },
   { href: "/movement", label: "Movement", icon: Activity },
