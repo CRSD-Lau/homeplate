@@ -35,7 +35,6 @@ export default async function AddFoodPage({
   const user = await requireUser();
   const [{ mealType }, query] = await Promise.all([params, searchParams]);
   const hasQuery = hasFoodSearchQuery(query.q);
-  const trimmedQuery = query.q?.trim() ?? "";
   const [data, review] = await Promise.all([
     getFoodAddPageData({
       userId: user.id,
@@ -56,7 +55,7 @@ export default async function AddFoodPage({
   });
   const scanHref = `/scan?${scanParams.toString()}`;
   const manualFoodHref = hasQuery
-    ? `/foods?q=${encodeURIComponent(trimmedQuery)}#manual-food`
+    ? `/foods?q=${encodeURIComponent(query.q ?? "")}#manual-food`
     : "/foods#manual-food";
   const copySources = data.copySources.filter(
     (source) =>
