@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Search, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -20,18 +20,34 @@ export function AddFoodSearchInput({
   const searchParams = useSearchParams();
   const [value, setValue] = useState(defaultQuery);
   const [isPending, startTransition] = useTransition();
+  const latestUrlRef = useRef({ date, search: "" });
 
   useEffect(() => {
     setValue(defaultQuery);
   }, [defaultQuery]);
 
   useEffect(() => {
+    latestUrlRef.current = {
+      date,
+      search: searchParams.toString(),
+    };
+  }, [date, searchParams]);
+
+  useEffect(() => {
     if (value === defaultQuery) return;
 
     const timeout = window.setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
+      const latestSearch =
+        window.location.search || latestUrlRef.current.search;
+      const params = new URLSearchParams(latestSearch);
+      const latestDate = params.get("date") || latestUrlRef.current.date;
+      const activeTab =
+        params.get("tab") === "my-meals" ? "my-meals" : "all-foods";
 
-      params.set("date", date);
+      params.set("date", latestDate);
+      params.delete("saved");
+      params.delete("error");
+      params.delete("skipped");
 
       if (value) {
         params.set("q", value);
@@ -39,23 +55,25 @@ export function AddFoodSearchInput({
         params.delete("q");
       }
 
-      if (tab === "my-meals") {
-        params.set("tab", tab);
+      if (activeTab === "my-meals") {
+        params.set("tab", activeTab);
       } else {
         params.delete("tab");
       }
 
       const queryString = params.toString();
+      const latestPathname = window.location.pathname || pathname;
 
       startTransition(() => {
-        router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
-          scroll: false,
-        });
+        router.replace(
+          queryString ? `${latestPathname}?${queryString}` : latestPathname,
+          { scroll: false },
+        );
       });
     }, 275);
 
     return () => window.clearTimeout(timeout);
-  }, [date, defaultQuery, pathname, router, searchParams, tab, value]);
+  }, [defaultQuery, pathname, router, value]);
 
   return (
     <form action={pathname} className="relative">
