@@ -167,6 +167,14 @@ pnpm db:studio
 pnpm db:seed
 ```
 
+Import reviewed Open Food Facts products from a local or downloaded JSONL gzip export:
+
+```powershell
+pnpm db:import:off -- --download --limit=25000
+```
+
+Downloaded source files live under ignored `data/openfoodfacts/`. Do not commit source dumps or database snapshots containing Open Food Facts data.
+
 Safe local DB reset requires an explicit confirmation:
 
 ```powershell
