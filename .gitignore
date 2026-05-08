@@ -46,3 +46,6 @@ Thumbs.db
 
 # misc
 *.tsbuildinfo
+.claude/
+docs/assets/
+docs/superpowers/plans/
