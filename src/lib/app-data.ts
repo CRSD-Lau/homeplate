@@ -132,6 +132,45 @@ export async function getFoodOptions(userId?: string) {
   return getFoodSearchOptions({ userId });
 }
 
+export async function getFoodsByBarcode(barcode: string) {
+  const rows = await getDb()
+    .select({
+      foodId: foods.id,
+      name: foods.name,
+      brand: foods.brand,
+      barcode: foods.barcode,
+      confidenceStatus: foods.confidenceStatus,
+      servingId: servings.id,
+      servingLabel: servings.label,
+      calories: foodNutrientValues.calories,
+      proteinG: foodNutrientValues.proteinG,
+      carbsG: foodNutrientValues.carbsG,
+      fatG: foodNutrientValues.fatG,
+      fibreG: foodNutrientValues.fibreG,
+      sugarG: foodNutrientValues.sugarG,
+      sodiumMg: foodNutrientValues.sodiumMg,
+    })
+    .from(foods)
+    .innerJoin(
+      servings,
+      and(eq(servings.foodId, foods.id), eq(servings.isDefault, true)),
+    )
+    .innerJoin(foodNutrientValues, eq(foodNutrientValues.servingId, servings.id))
+    .where(eq(foods.barcode, barcode))
+    .orderBy(asc(foods.name));
+
+  return rows.map((row) => ({
+    ...row,
+    calories: Number(row.calories),
+    proteinG: Number(row.proteinG),
+    carbsG: Number(row.carbsG),
+    fatG: Number(row.fatG),
+    fibreG: row.fibreG === null ? null : Number(row.fibreG),
+    sugarG: row.sugarG === null ? null : Number(row.sugarG),
+    sodiumMg: row.sodiumMg === null ? null : Number(row.sodiumMg),
+  }));
+}
+
 export async function getFoodSearchOptions({
   query = "",
   source = "all",

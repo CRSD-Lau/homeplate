@@ -42,6 +42,13 @@ import {
   scaleNutrientsForServing,
   type NutrientSnapshot,
 } from "@/lib/nutrition";
+import { isPlausibleBarcode, normalizeBarcode } from "@/lib/barcodes";
+import { parseOpenFoodFactsProduct } from "@/lib/open-food-facts";
+import { fetchOpenFoodFactsProduct } from "@/lib/open-food-facts-api";
+import {
+  getOpenFoodFactsDataSourceId,
+  upsertOpenFoodFactsProduct,
+} from "@/lib/open-food-facts-import";
 import {
   ALL_MEAL_TYPES,
   normalizeMealType,
@@ -306,6 +313,85 @@ export async function createManualFoodAction(formData: FormData) {
   revalidatePath("/foods");
   revalidatePath("/log");
   redirect("/foods?saved=food");
+}
+
+export async function saveOpenFoodFactsProductAction(formData: FormData) {
+  await requireUser();
+  const returnTo = safeReturnTo(formData, "/scan");
+  const barcode = normalizeBarcode(optionalString(formData, "barcode"));
+
+  if (!barcode || !isPlausibleBarcode(barcode)) {
+    redirect(
+      addSearchParams(returnTo, {
+        error: "Enter a valid barcode before saving.",
+      }),
+    );
+  }
+
+  let fetchResult: Awaited<ReturnType<typeof fetchOpenFoodFactsProduct>>;
+  try {
+    fetchResult = await fetchOpenFoodFactsProduct(barcode);
+  } catch (error) {
+    logActionError("Open Food Facts product confirmation failed", error);
+    redirect(
+      addSearchParams(returnTo, {
+        error: "Open Food Facts could not confirm this product. Please try again.",
+      }),
+    );
+  }
+
+  if (!fetchResult.ok) {
+    redirect(
+      addSearchParams(returnTo, {
+        error: "Open Food Facts could not confirm this product. Please try again.",
+      }),
+    );
+  }
+
+  const parsed = parseOpenFoodFactsProduct(fetchResult.raw, {
+    countries: ["canada", "united-states"],
+  });
+
+  if (!parsed.ok) {
+    redirect(
+      addSearchParams(returnTo, {
+        error: "This product no longer has enough nutrition data to save.",
+      }),
+    );
+  }
+
+  let saveFailed = false;
+  try {
+    const dataSourceId = await getOpenFoodFactsDataSourceId();
+    await upsertOpenFoodFactsProduct({
+      dataSourceId,
+      importRunId: null,
+      confidenceStatus: "provisional",
+      product: {
+        ...parsed.product,
+        raw: {
+          ...parsed.product.raw,
+          homeplateReviewedAt: new Date().toISOString(),
+        },
+      },
+    });
+  } catch (error) {
+    logActionError("Open Food Facts product save failed", error);
+    saveFailed = true;
+  }
+
+  if (saveFailed) {
+    redirect(
+      addSearchParams(returnTo, {
+        error: "Save failed. Please try again.",
+      }),
+    );
+  }
+
+  revalidatePath("/scan");
+  revalidatePath("/foods");
+  revalidatePath("/log");
+  redirect(addSearchParams(returnTo, { saved: "barcode" }));
 }
 
 export async function updateManualFoodAction(formData: FormData) {
