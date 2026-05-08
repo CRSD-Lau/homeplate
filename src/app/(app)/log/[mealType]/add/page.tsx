@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { Barcode, Camera, Mic, Search } from "lucide-react";
+import { Suspense, type ReactNode } from "react";
+import { Barcode, Camera, Mic, Search, X } from "lucide-react";
 
 import { copyLoggedMealAction } from "@/app/actions";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FormMessage } from "@/components/form-message";
+import { AddFoodSearchInput } from "@/components/tracking/AddFoodSearchInput";
 import { FoodSearchResult } from "@/components/tracking/FoodSearchResult";
 import { SavedMealCard } from "@/components/tracking/SavedMealCard";
 import { TrackingPageShell } from "@/components/tracking/TrackingPageShell";
@@ -104,21 +106,22 @@ export default async function AddFoodPage({
         </TabLink>
       </div>
 
-      <form action={`/log/${data.mealType}/add`} className="relative">
-        <Search
-          aria-hidden="true"
-          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--brand-muted)]"
-          size={20}
+      <Suspense
+        fallback={
+          <SearchFallback
+            defaultQuery={query.q ?? ""}
+            date={data.date}
+            tab={activeTab}
+            action={`/log/${data.mealType}/add`}
+          />
+        }
+      >
+        <AddFoodSearchInput
+          defaultQuery={query.q ?? ""}
+          date={data.date}
+          tab={activeTab}
         />
-        <input type="hidden" name="date" value={data.date} />
-        <input type="hidden" name="tab" value={activeTab} />
-        <input
-          name="q"
-          defaultValue={query.q ?? ""}
-          placeholder="Search for your food"
-          className="field min-h-14 rounded-full pl-12"
-        />
-      </form>
+      </Suspense>
 
       <div className="grid grid-cols-3 gap-2">
         <ComingSoon icon={<Camera aria-hidden="true" size={22} />} label="Scan meal" />
@@ -260,7 +263,7 @@ function TabLink({
 }: {
   href: string;
   active: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <Link
@@ -280,7 +283,7 @@ function ComingSoon({
   icon,
   label,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
 }) {
   return (
@@ -293,5 +296,50 @@ function ComingSoon({
       {label}
       <span className="text-[0.65rem] font-bold uppercase">Coming soon</span>
     </button>
+  );
+}
+
+function SearchFallback({
+  defaultQuery,
+  date,
+  tab,
+  action,
+}: {
+  defaultQuery: string;
+  date: string;
+  tab: "all-foods" | "my-meals";
+  action: string;
+}) {
+  return (
+    <form action={action} className="relative">
+      <Search
+        aria-hidden="true"
+        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--brand-muted)]"
+        size={20}
+      />
+      <input type="hidden" name="date" value={date} />
+      <input type="hidden" name="tab" value={tab} />
+      <input
+        aria-label="Search for your food"
+        name="q"
+        defaultValue={defaultQuery}
+        placeholder="Search for your food"
+        readOnly
+        className="field min-h-14 rounded-full pl-12 pr-12"
+      />
+      <button
+        type="button"
+        aria-label="Clear search"
+        className={`absolute right-4 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[var(--brand-muted)] transition-opacity ${
+          defaultQuery ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        tabIndex={-1}
+      >
+        <X aria-hidden="true" size={18} />
+      </button>
+      <button type="submit" className="sr-only">
+        Search
+      </button>
+    </form>
   );
 }
