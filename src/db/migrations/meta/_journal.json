@@ -29,6 +29,13 @@
       "when": 1778218410557,
       "tag": "0003_phase_2b_open_food_facts_upserts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778219651960,
+      "tag": "0004_phase_2b_open_food_facts_source_unique",
+      "breakpoints": true
     }
   ]
 }

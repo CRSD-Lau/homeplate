@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { getDb } from "../db";
 import {
@@ -27,6 +27,22 @@ type ImportResult =
   | { ok: false; reason: OpenFoodFactsSkipReason };
 
 type OpenFoodFactsConfidenceStatus = "imported" | "provisional";
+type ExistingOpenFoodFactsConfidenceStatus =
+  | OpenFoodFactsConfidenceStatus
+  | "verified"
+  | "manual"
+  | "ocr_draft";
+type Db = ReturnType<typeof getDb>;
+type DbTransaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type DbExecutor = Db | DbTransaction;
+
+const openFoodFactsSource = {
+  name: "Open Food Facts",
+  sourceType: "open_food_facts" as const,
+  licenseName: "Open Database License (ODbL)",
+  attribution: "Product data from Open Food Facts.",
+};
+const generatedOpenFoodFactsServingLabels = ["100 g", "100 ml"] as const;
 
 export function createImportSummary(): OpenFoodFactsImportSummary {
   return { seen: 0, accepted: 0, skipped: 0, skipReasons: {}, warnings: {} };
@@ -51,23 +67,27 @@ export function recordImportResult(
     (summary.skipReasons[result.reason] ?? 0) + 1;
 }
 
+export function resolveOpenFoodFactsConfidenceStatus(
+  existing: ExistingOpenFoodFactsConfidenceStatus | null,
+  incoming: OpenFoodFactsConfidenceStatus,
+): ExistingOpenFoodFactsConfidenceStatus {
+  if (existing === "manual" || existing === "verified") return existing;
+  if (existing === "imported") return "imported";
+  return incoming;
+}
+
 export async function getOpenFoodFactsDataSourceId() {
-  const db = getDb();
-  const [existing] = await db
-    .select({ id: dataSources.id })
-    .from(dataSources)
-    .where(eq(dataSources.name, "Open Food Facts"))
-    .limit(1);
-
-  if (existing) return existing.id;
-
-  const [source] = await db
+  const [source] = await getDb()
     .insert(dataSources)
-    .values({
-      name: "Open Food Facts",
-      sourceType: "open_food_facts",
-      licenseName: "Open Database License (ODbL)",
-      attribution: "Product data from Open Food Facts.",
+    .values(openFoodFactsSource)
+    .onConflictDoUpdate({
+      target: dataSources.sourceType,
+      targetWhere: sql`${dataSources.sourceType} = 'open_food_facts'`,
+      set: {
+        name: openFoodFactsSource.name,
+        licenseName: openFoodFactsSource.licenseName,
+        attribution: openFoodFactsSource.attribution,
+      },
     })
     .returning({ id: dataSources.id });
 
@@ -108,44 +128,37 @@ export async function upsertOpenFoodFactsProduct({
   product: ParsedOpenFoodFactsProduct;
   confidenceStatus?: OpenFoodFactsConfidenceStatus;
 }) {
-  await upsertSourceRecord({ dataSourceId, importRunId, product });
+  return getDb().transaction(async (tx) => {
+    await upsertSourceRecord(tx, { dataSourceId, importRunId, product });
 
-  const food = await upsertFood({
-    dataSourceId,
-    product,
-    confidenceStatus,
+    const food = await upsertFood(tx, {
+      dataSourceId,
+      product,
+      confidenceStatus,
+    });
+    if (!food.shouldUpdateServings) return food.id;
+
+    const defaultServingId = await upsertDefaultServing(tx, food.id, product);
+
+    await upsertDefaultNutrients(tx, food.id, defaultServingId, product);
+    await syncAdditionalServings(tx, food.id, product);
+
+    return food.id;
   });
-  if (!food.shouldUpdateServings) return food.id;
-
-  const defaultServingId = await upsertDefaultServing(food.id, product);
-
-  await upsertDefaultNutrients(food.id, defaultServingId, product);
-  await createMissingAdditionalServings(food.id, product);
-
-  return food.id;
 }
 
-async function upsertSourceRecord({
-  dataSourceId,
-  importRunId,
-  product,
-}: {
-  dataSourceId: string;
-  importRunId: string | null;
-  product: ParsedOpenFoodFactsProduct;
-}) {
-  const db = getDb();
-  const [existingSourceRecord] = await db
-    .select({ id: sourceRecords.id })
-    .from(sourceRecords)
-    .where(
-      and(
-        eq(sourceRecords.dataSourceId, dataSourceId),
-        eq(sourceRecords.externalId, product.barcode),
-      ),
-    )
-    .limit(1);
-
+async function upsertSourceRecord(
+  db: DbExecutor,
+  {
+    dataSourceId,
+    importRunId,
+    product,
+  }: {
+    dataSourceId: string;
+    importRunId: string | null;
+    product: ParsedOpenFoodFactsProduct;
+  },
+) {
   const values = {
     importRunId,
     barcode: product.barcode,
@@ -153,36 +166,71 @@ async function upsertSourceRecord({
     fetchedAt: new Date(),
   };
 
-  if (existingSourceRecord) {
-    await db
-      .update(sourceRecords)
-      .set(values)
-      .where(eq(sourceRecords.id, existingSourceRecord.id));
-    return;
-  }
-
-  await db.insert(sourceRecords).values({
-    dataSourceId,
-    externalId: product.barcode,
-    ...values,
-  });
+  await db
+    .insert(sourceRecords)
+    .values({
+      dataSourceId,
+      externalId: product.barcode,
+      ...values,
+    })
+    .onConflictDoUpdate({
+      target: [sourceRecords.dataSourceId, sourceRecords.externalId],
+      targetWhere: sql`${sourceRecords.externalId} IS NOT NULL`,
+      set: values,
+    });
 }
 
-async function upsertFood({
-  dataSourceId,
-  product,
-  confidenceStatus,
-}: {
-  dataSourceId: string;
-  product: ParsedOpenFoodFactsProduct;
-  confidenceStatus: OpenFoodFactsConfidenceStatus;
-}) {
-  const db = getDb();
-  const [existingFood] = await db
-    .select({
-      id: foods.id,
-      confidenceStatus: foods.confidenceStatus,
+async function upsertFood(
+  db: DbExecutor,
+  {
+    dataSourceId,
+    product,
+    confidenceStatus,
+  }: {
+    dataSourceId: string;
+    product: ParsedOpenFoodFactsProduct;
+    confidenceStatus: OpenFoodFactsConfidenceStatus;
+  },
+) {
+  const foodValues = {
+    name: product.name,
+    brand: product.brand,
+    barcode: product.barcode,
+    foodType: "branded" as const,
+    confidenceStatus,
+  };
+
+  const [food] = await db
+    .insert(foods)
+    .values({
+      ...foodValues,
+      sourceId: dataSourceId,
+      sourceExternalId: product.barcode,
     })
+    .onConflictDoUpdate({
+      target: [foods.sourceId, foods.sourceExternalId],
+      targetWhere: sql`${foods.sourceId} IS NOT NULL AND ${foods.sourceExternalId} IS NOT NULL`,
+      set: {
+        name: product.name,
+        brand: product.brand,
+        barcode: product.barcode,
+        foodType: "branded",
+        confidenceStatus: sql`
+          case
+            when ${foods.confidenceStatus} = 'imported' then 'imported'::confidence_status
+            else ${confidenceStatus}::confidence_status
+          end
+        `,
+        updatedAt: new Date(),
+      },
+      setWhere: sql`${foods.confidenceStatus} NOT IN ('verified', 'manual')`,
+    })
+    .returning({ id: foods.id });
+
+  if (food) return { id: food.id, shouldUpdateServings: true };
+
+  const [existingFood] = await db
+    .select({ id: foods.id })
     .from(foods)
     .where(
       and(
@@ -192,47 +240,20 @@ async function upsertFood({
     )
     .limit(1);
 
-  if (
-    existingFood?.confidenceStatus === "verified" ||
-    existingFood?.confidenceStatus === "manual"
-  ) {
-    return { id: existingFood.id, shouldUpdateServings: false };
+  if (!existingFood) {
+    throw new Error(
+      `Open Food Facts food upsert returned no row for ${product.barcode}.`,
+    );
   }
 
-  const foodValues = {
-    name: product.name,
-    brand: product.brand,
-    barcode: product.barcode,
-    foodType: "branded" as const,
-    confidenceStatus,
-  };
-
-  if (existingFood) {
-    const [food] = await db
-      .update(foods)
-      .set({ ...foodValues, updatedAt: new Date() })
-      .where(eq(foods.id, existingFood.id))
-      .returning({ id: foods.id });
-    return { id: food.id, shouldUpdateServings: true };
-  }
-
-  const [food] = await db
-    .insert(foods)
-    .values({
-      ...foodValues,
-      sourceId: dataSourceId,
-      sourceExternalId: product.barcode,
-    })
-    .returning({ id: foods.id });
-
-  return { id: food.id, shouldUpdateServings: true };
+  return { id: existingFood.id, shouldUpdateServings: false };
 }
 
 async function upsertDefaultServing(
+  db: DbExecutor,
   foodId: string,
   product: ParsedOpenFoodFactsProduct,
 ) {
-  const db = getDb();
   const [existingDefaultServing] = await db
     .select({ id: servings.id })
     .from(servings)
@@ -263,11 +284,11 @@ async function upsertDefaultServing(
 }
 
 async function upsertDefaultNutrients(
+  db: DbExecutor,
   foodId: string,
   servingId: string,
   product: ParsedOpenFoodFactsProduct,
 ) {
-  const db = getDb();
   const [existingNutrients] = await db
     .select({ id: foodNutrientValues.id })
     .from(foodNutrientValues)
@@ -289,22 +310,39 @@ async function upsertDefaultNutrients(
   });
 }
 
-async function createMissingAdditionalServings(
+async function syncAdditionalServings(
+  db: DbExecutor,
   foodId: string,
   product: ParsedOpenFoodFactsProduct,
 ) {
-  const db = getDb();
+  const incomingByLabel = new Map(
+    product.additionalServings
+      .filter((serving) => isGeneratedOpenFoodFactsServingLabel(serving.label))
+      .map((serving) => [serving.label, serving]),
+  );
 
-  for (const serving of product.additionalServings) {
+  for (const serving of incomingByLabel.values()) {
     const [existingAdditional] = await db
       .select({ id: servings.id })
       .from(servings)
       .where(
-        and(eq(servings.foodId, foodId), eq(servings.label, serving.label)),
+        and(
+          eq(servings.foodId, foodId),
+          eq(servings.label, serving.label),
+          eq(servings.isDefault, false),
+        ),
       )
       .limit(1);
 
-    if (!existingAdditional) {
+    if (existingAdditional) {
+      await db
+        .update(servings)
+        .set({
+          grams: serving.grams,
+          millilitres: serving.millilitres,
+        })
+        .where(eq(servings.id, existingAdditional.id));
+    } else {
       await db.insert(servings).values({
         foodId,
         ...serving,
@@ -312,4 +350,10 @@ async function createMissingAdditionalServings(
       });
     }
   }
+}
+
+function isGeneratedOpenFoodFactsServingLabel(label: string) {
+  return generatedOpenFoodFactsServingLabels.includes(
+    label as (typeof generatedOpenFoodFactsServingLabels)[number],
+  );
 }

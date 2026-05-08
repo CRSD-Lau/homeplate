@@ -147,16 +147,24 @@ export const userSettings = pgTable(
   (table) => [uniqueIndex("user_settings_user_id_unique").on(table.userId)],
 );
 
-export const dataSources = pgTable("data_sources", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: varchar("name", { length: 160 }).notNull(),
-  sourceType: sourceTypeEnum("source_type").notNull(),
-  licenseName: varchar("license_name", { length: 160 }),
-  attribution: text("attribution"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const dataSources = pgTable(
+  "data_sources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 160 }).notNull(),
+    sourceType: sourceTypeEnum("source_type").notNull(),
+    licenseName: varchar("license_name", { length: 160 }),
+    attribution: text("attribution"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("data_sources_open_food_facts_unique")
+      .on(table.sourceType)
+      .where(sql`${table.sourceType} = 'open_food_facts'`),
+  ],
+);
 
 export const importRuns = pgTable(
   "import_runs",
@@ -331,7 +339,9 @@ export const foodLogs = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    foodId: uuid("food_id").references(() => foods.id, { onDelete: "set null" }),
+    foodId: uuid("food_id").references(() => foods.id, {
+      onDelete: "set null",
+    }),
     servingId: uuid("serving_id").references(() => servings.id, {
       onDelete: "set null",
     }),
@@ -379,7 +389,9 @@ export const weightLogs = pgTable(
     notes: text("notes"),
     ...timestamps,
   },
-  (table) => [index("weight_logs_user_date_idx").on(table.userId, table.logDate)],
+  (table) => [
+    index("weight_logs_user_date_idx").on(table.userId, table.logDate),
+  ],
 );
 
 export const waterLogs = pgTable(
@@ -399,7 +411,9 @@ export const waterLogs = pgTable(
     notes: text("notes"),
     ...timestamps,
   },
-  (table) => [index("water_logs_user_date_idx").on(table.userId, table.logDate)],
+  (table) => [
+    index("water_logs_user_date_idx").on(table.userId, table.logDate),
+  ],
 );
 
 export const exerciseLogs = pgTable(
@@ -564,8 +578,12 @@ export const foodImages = pgTable(
   "food_images",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-    foodId: uuid("food_id").references(() => foods.id, { onDelete: "set null" }),
+    userId: uuid("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    foodId: uuid("food_id").references(() => foods.id, {
+      onDelete: "set null",
+    }),
     storagePath: text("storage_path").notNull(),
     rawOcrText: text("raw_ocr_text"),
     parsedOcrJson: jsonb("parsed_ocr_json").$type<Record<string, unknown>>(),
