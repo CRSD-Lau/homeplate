@@ -4,6 +4,10 @@ HomePlate is a private household nutrition, body, and wellness tracker for Neil 
 
 This is not a public SaaS, not a commercial food database, not a subscription product, and not a medical product. It stores and visualizes private wellness data only. It does not provide diagnosis, treatment advice, or clinical interpretation.
 
+## App Preview
+
+![HomePlate light and dark mode mobile dashboard](docs/readme-showcase.png)
+
 ## Current Phase
 
 Phase 1 MVP foundation is complete and released as `v0.1.0`.
