@@ -45,6 +45,11 @@ export default async function AddFoodPage({
   if (activeTab === "my-meals") returnToParams.set("tab", "my-meals");
   if (query.q) returnToParams.set("q", query.q);
   const returnTo = `/log/${data.mealType}/add?${returnToParams.toString()}`;
+  const scanParams = new URLSearchParams({
+    meal: data.mealType,
+    date: data.date,
+  });
+  const scanHref = `/scan?${scanParams.toString()}`;
   const copySources = data.copySources.filter(
     (source) =>
       !(
@@ -119,7 +124,7 @@ export default async function AddFoodPage({
         <ComingSoon icon={<Camera aria-hidden="true" size={22} />} label="Scan meal" />
         <ComingSoon icon={<Mic aria-hidden="true" size={22} />} label="Describe meal" />
         <Link
-          href={`/scan?meal=${data.mealType}&date=${data.date}`}
+          href={scanHref}
           className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--brand-line)] bg-[var(--brand-card)] p-2 text-center text-sm font-extrabold text-[var(--brand-ink)] shadow-[var(--brand-shadow-soft)]"
         >
           <Barcode aria-hidden="true" size={24} />

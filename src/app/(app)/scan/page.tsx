@@ -1,39 +1,151 @@
 import Link from "next/link";
-import { Barcode } from "lucide-react";
 
+import {
+  BarcodeFailureCard,
+  BarcodeSearchForm,
+  LiveBarcodeReviewCard,
+  LocalBarcodeMatchCard,
+} from "@/components/tracking/BarcodeLookupCard";
 import { TrackingPageShell } from "@/components/tracking/TrackingPageShell";
+import { getFoodsByBarcode } from "@/lib/app-data";
+import { isPlausibleBarcode, normalizeBarcode } from "@/lib/barcodes";
+import { fetchOpenFoodFactsProduct } from "@/lib/open-food-facts-api";
+import { parseOpenFoodFactsProduct } from "@/lib/open-food-facts";
 
 export default async function ScanPage({
   searchParams,
 }: {
-  searchParams: Promise<{ meal?: string; date?: string }>;
+  searchParams: Promise<{
+    meal?: string;
+    date?: string;
+    barcode?: string;
+    error?: string;
+    saved?: string;
+  }>;
 }) {
   const params = await searchParams;
-  const backHref =
-    params.meal && params.date
-      ? `/log/${params.meal}/add?date=${params.date}`
-      : "/log";
+  const backHref = buildBackHref(params.meal, params.date);
+  const normalizedBarcode = normalizeBarcode(params.barcode);
+  const hasBarcode = normalizedBarcode !== null;
+  const plausibleBarcode =
+    normalizedBarcode !== null && isPlausibleBarcode(normalizedBarcode);
+  const localMatches = plausibleBarcode
+    ? await getFoodsByBarcode(normalizedBarcode)
+    : [];
+  const liveResult =
+    plausibleBarcode && localMatches.length === 0
+      ? await fetchOpenFoodFactsProduct(normalizedBarcode)
+      : null;
+  const parsedLive =
+    liveResult?.ok
+      ? parseOpenFoodFactsProduct(liveResult.raw, {
+          countries: ["canada", "united-states"],
+        })
+      : null;
+  const returnTo = buildScanReturnTo(params.meal, params.date, normalizedBarcode);
 
   return (
     <TrackingPageShell title="Scan barcode" backHref={backHref}>
-      <section className="hp-card-lg p-8 text-center">
-        <span className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[var(--brand-soft)] text-[var(--brand-teal)]">
-          <Barcode aria-hidden="true" size={34} />
-        </span>
-        <h2 className="mt-5 hp-display text-3xl">
-          Barcode scanning is planned for Phase 3.
-        </h2>
-        <p className="mx-auto mt-3 max-w-sm text-sm font-medium leading-6 text-[var(--brand-muted)]">
-          This entry point is ready, but HomePlate is not calling barcode APIs or
-          external food databases in this pass.
+      {params.error ? <BarcodeFailureCard message={params.error} /> : null}
+      {params.saved ? (
+        <p className="rounded-2xl border border-[var(--brand-green)]/30 bg-[var(--brand-green)]/10 px-3 py-2 text-sm font-bold text-[var(--brand-green)]">
+          Product saved.
         </p>
-        <Link
-          href={backHref}
-          className="primary-button mt-6 inline-flex w-auto items-center px-8"
-        >
-          Back to foods
-        </Link>
-      </section>
+      ) : null}
+
+      <BarcodeSearchForm
+        defaultBarcode={params.barcode}
+        meal={params.meal}
+        date={params.date}
+      />
+
+      {hasBarcode && !plausibleBarcode ? (
+        <BarcodeFailureCard message="Barcode must be 8, 12, 13, or 14 digits." />
+      ) : null}
+
+      {localMatches.length > 0 ? (
+        <section className="space-y-3">
+          {localMatches.map((food) => (
+            <LocalBarcodeMatchCard
+              key={`${food.foodId}|${food.servingId}`}
+              food={food}
+              meal={params.meal}
+              date={params.date}
+              returnTo={returnTo}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {liveResult && !liveResult.ok ? (
+        <BarcodeFailureCard message={openFoodFactsFailureMessage(liveResult.reason)} />
+      ) : null}
+
+      {parsedLive && !parsedLive.ok ? (
+        <BarcodeFailureCard message={parseFailureMessage(parsedLive.reason)} />
+      ) : null}
+
+      {normalizedBarcode && parsedLive?.ok ? (
+        <LiveBarcodeReviewCard
+          product={parsedLive.product}
+          barcode={normalizedBarcode}
+          returnTo={returnTo}
+        />
+      ) : null}
+
+      <Link
+        href={backHref}
+        className="secondary-button inline-flex items-center justify-center"
+      >
+        Back to foods
+      </Link>
     </TrackingPageShell>
   );
+}
+
+function buildBackHref(meal?: string, date?: string) {
+  if (!meal || !date) return "/log";
+  const params = new URLSearchParams({ date });
+  return `/log/${encodeURIComponent(meal)}/add?${params.toString()}`;
+}
+
+function buildScanReturnTo(
+  meal?: string,
+  date?: string,
+  barcode?: string | null,
+) {
+  const params = new URLSearchParams();
+  if (meal) params.set("meal", meal);
+  if (date) params.set("date", date);
+  if (barcode) params.set("barcode", barcode);
+  const query = params.toString();
+  return query ? `/scan?${query}` : "/scan";
+}
+
+function openFoodFactsFailureMessage(reason: "not_found" | "request_failed") {
+  if (reason === "not_found") {
+    return "Open Food Facts did not find a product for this barcode.";
+  }
+
+  return "Open Food Facts could not be reached. Please try again.";
+}
+
+function parseFailureMessage(reason: string) {
+  switch (reason) {
+    case "wrong_country":
+      return "This product is not listed for Canada or the United States.";
+    case "quality_errors":
+      return "Open Food Facts reports quality errors for this product.";
+    case "missing_name":
+      return "This product is missing a usable name.";
+    case "missing_serving":
+      return "This product is missing serving size data.";
+    case "missing_nutrition":
+    case "missing_macros":
+      return "This product is missing enough nutrition data to save.";
+    case "obsolete_product":
+      return "This product is marked obsolete in Open Food Facts.";
+    default:
+      return "This product could not be imported from Open Food Facts.";
+  }
 }
