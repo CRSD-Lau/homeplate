@@ -58,6 +58,10 @@ const checkedNutrientKeys = [
   "salt_100g",
 ] as const;
 
+const maxFoodNameLength = 240;
+const maxFoodBrandLength = 160;
+const maxServingLabelLength = 120;
+
 export function parseOpenFoodFactsProduct(
   raw: Record<string, unknown>,
   options: { countries?: string[] } = {},
@@ -112,8 +116,11 @@ export function parseOpenFoodFactsProduct(
     ok: true,
     product: {
       barcode,
-      name,
-      brand: firstNonEmpty(stringField(raw.brands), stringField(raw.brands_en)),
+      name: truncateText(name, maxFoodNameLength),
+      brand: truncateNullableText(
+        firstNonEmpty(stringField(raw.brands), stringField(raw.brands_en)),
+        maxFoodBrandLength,
+      ),
       defaultServing: serving,
       additionalServings:
         serving.grams !== null
@@ -164,7 +171,7 @@ function parseServing(raw: Record<string, unknown>): ParsedOpenFoodFactsServing 
   if (!label || amount === null || amount <= 0 || !unit) return null;
 
   return {
-    label,
+    label: truncateText(label, maxServingLabelLength),
     grams: unit === "g" ? amount : null,
     millilitres: unit === "ml" ? amount : null,
   };
@@ -275,6 +282,14 @@ function toCountryTag(country: string) {
 
 function firstNonEmpty(...values: (string | null)[]) {
   return values.find((value) => value !== null && value.length > 0) ?? null;
+}
+
+function truncateNullableText(value: string | null, maxLength: number) {
+  return value === null ? null : truncateText(value, maxLength);
+}
+
+function truncateText(value: string, maxLength: number) {
+  return value.length > maxLength ? value.slice(0, maxLength) : value;
 }
 
 function stringField(value: unknown) {

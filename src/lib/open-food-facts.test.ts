@@ -57,6 +57,29 @@ describe("parseOpenFoodFactsProduct", () => {
     expect(parsed.product.raw).toBe(baseProduct);
   });
 
+  it("clamps imported display text to database column limits", () => {
+    const longName = `Product ${"name ".repeat(60)}`;
+    const longBrand = `Brand ${"label ".repeat(40)}`;
+    const longServing = `Serving ${"label ".repeat(25)}(42 g)`;
+    const rawProduct = {
+      ...baseProduct,
+      product_name: longName,
+      brands: longBrand,
+      serving_size: longServing,
+    };
+
+    const parsed = parseOpenFoodFactsProduct(rawProduct, {
+      countries: ["canada"],
+    });
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.product.name).toBe(longName.slice(0, 240));
+    expect(parsed.product.brand).toBe(longBrand.slice(0, 160));
+    expect(parsed.product.defaultServing.label).toBe(longServing.slice(0, 120));
+    expect(parsed.product.raw).toBe(rawProduct);
+  });
+
   it("maps millilitre label servings from 100g nutrient values", () => {
     const parsed = parseOpenFoodFactsProduct(
       {
