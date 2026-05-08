@@ -30,7 +30,10 @@ import {
   toDateInputValue,
 } from "@/lib/dates";
 import { formatServingOptionsInput } from "@/lib/food-servings";
-import { rankFoodSearchResults } from "@/lib/food-search";
+import {
+  hasFoodSearchQuery,
+  rankFoodSearchResults,
+} from "@/lib/food-search";
 import { parseDashboardPreferences } from "@/lib/dashboard-preferences";
 import {
   scaleNutrientsForServing,
@@ -184,6 +187,8 @@ export async function getFoodSearchOptions({
   source?: "all" | "manual" | "verified" | "provisional";
   userId?: string;
 } = {}) {
+  if (!hasFoodSearchQuery(query)) return [];
+
   const rows = await getFoodSearchRows({ query, userId });
   const mapped = rows
     .filter((food) => foodSourceMatches(food, source))
@@ -456,8 +461,7 @@ export async function getFoodLogPageData(
   date = toDateInputValue(),
 ) {
   const selectedDate = normalizeDateInputValue(date);
-  const [foodOptions, logs, recentRows] = await Promise.all([
-    getFoodOptions(userId),
+  const [logs, recentRows] = await Promise.all([
     getDb()
       .select()
       .from(foodLogs)
@@ -505,7 +509,6 @@ export async function getFoodLogPageData(
 
   return {
     date: selectedDate,
-    foodOptions,
     logs,
     mealTotals,
     nutrition: mealTotals.daily,

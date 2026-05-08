@@ -8,6 +8,10 @@ export type RankedFoodSearchItem = {
   similarity: number;
 };
 
+export function hasFoodSearchQuery(query: string | null | undefined) {
+  return Boolean(query?.trim());
+}
+
 export function rankFoodSearchResults<T extends RankedFoodSearchItem>(
   query: string,
   foods: T[],
@@ -33,6 +37,7 @@ function scoreFoodSearchResult(query: string, food: RankedFoodSearchItem) {
   if (normalizedQuery) {
     if (fields.some((field) => field === normalizedQuery)) score += 500;
     if (fields.some((field) => field.startsWith(normalizedQuery))) score += 250;
+    if (fields.some((field) => field.includes(normalizedQuery))) score += 125;
   }
 
   return score;

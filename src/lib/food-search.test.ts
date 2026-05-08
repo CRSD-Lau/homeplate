@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { rankFoodSearchResults } from "./food-search";
+import { hasFoodSearchQuery, rankFoodSearchResults } from "./food-search";
 
 const baseFood = {
   name: "Food",
@@ -12,6 +12,14 @@ const baseFood = {
 };
 
 describe("food search helpers", () => {
+  it("detects whether a food search query has real text", () => {
+    expect(hasFoodSearchQuery(null)).toBe(false);
+    expect(hasFoodSearchQuery(undefined)).toBe(false);
+    expect(hasFoodSearchQuery("")).toBe(false);
+    expect(hasFoodSearchQuery("   \t\n")).toBe(false);
+    expect(hasFoodSearchQuery("pean")).toBe(true);
+  });
+
   it("orders favourites before recent and weaker fuzzy matches", () => {
     const ranked = rankFoodSearchResults("yogurt", [
       {
@@ -70,6 +78,35 @@ describe("food search helpers", () => {
       "alias",
       "prefix",
       "fuzzy",
+    ]);
+  });
+
+  it("ranks prefix matches above contains matches above weak unrelated matches", () => {
+    const ranked = rankFoodSearchResults("Pean", [
+      {
+        ...baseFood,
+        id: "weak",
+        name: "Almond butter",
+        similarity: 0.9,
+      },
+      {
+        ...baseFood,
+        id: "contains",
+        name: "Chocolate peanut cluster",
+        similarity: 0.1,
+      },
+      {
+        ...baseFood,
+        id: "prefix",
+        name: "Peanut butter",
+        similarity: 0.1,
+      },
+    ]);
+
+    expect(ranked.map((food) => food.id)).toEqual([
+      "prefix",
+      "contains",
+      "weak",
     ]);
   });
 });
