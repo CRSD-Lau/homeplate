@@ -15,16 +15,27 @@ export function AddFoodSearchInput({
   date,
   tab,
 }: AddFoodSearchInputProps) {
+  return (
+    <AddFoodSearchInputInner
+      key={defaultQuery}
+      defaultQuery={defaultQuery}
+      date={date}
+      tab={tab}
+    />
+  );
+}
+
+function AddFoodSearchInputInner({
+  defaultQuery,
+  date,
+  tab,
+}: AddFoodSearchInputProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [value, setValue] = useState(defaultQuery);
   const [isPending, startTransition] = useTransition();
   const latestUrlRef = useRef({ date, search: "" });
-
-  useEffect(() => {
-    setValue(defaultQuery);
-  }, [defaultQuery]);
 
   useEffect(() => {
     latestUrlRef.current = {
