@@ -12,23 +12,39 @@ import { isPlausibleBarcode, normalizeBarcode } from "@/lib/barcodes";
 import { fetchOpenFoodFactsProduct } from "@/lib/open-food-facts-api";
 import { parseOpenFoodFactsProduct } from "@/lib/open-food-facts";
 
+type SearchParamValue = string | string[] | undefined;
+
 export default async function ScanPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    meal?: string;
-    date?: string;
-    barcode?: string;
-    error?: string;
-    saved?: string;
+    meal?: SearchParamValue;
+    date?: SearchParamValue;
+    barcode?: SearchParamValue;
+    error?: SearchParamValue;
+    saved?: SearchParamValue;
   }>;
 }) {
-  const params = await searchParams;
-  const backHref = buildBackHref(params.meal, params.date);
+  const rawParams = await searchParams;
+  const params = {
+    meal: firstSearchParam(rawParams.meal),
+    date: firstSearchParam(rawParams.date),
+    barcode: firstSearchParam(rawParams.barcode),
+    error: firstSearchParam(rawParams.error),
+    saved: firstSearchParam(rawParams.saved),
+  };
+  const attemptedBarcode = params.barcode !== undefined;
   const normalizedBarcode = normalizeBarcode(params.barcode);
-  const hasBarcode = normalizedBarcode !== null;
+  const hasDigits = normalizedBarcode !== null;
   const plausibleBarcode =
     normalizedBarcode !== null && isPlausibleBarcode(normalizedBarcode);
+  const barcodeError =
+    attemptedBarcode && !hasDigits
+      ? "Enter a barcode with digits."
+      : hasDigits && !plausibleBarcode
+        ? "Barcode must be 8, 12, 13, or 14 digits."
+        : null;
+  const backHref = buildBackHref(params.meal, params.date);
   const localMatches = plausibleBarcode
     ? await getFoodsByBarcode(normalizedBarcode)
     : [];
@@ -59,9 +75,7 @@ export default async function ScanPage({
         date={params.date}
       />
 
-      {hasBarcode && !plausibleBarcode ? (
-        <BarcodeFailureCard message="Barcode must be 8, 12, 13, or 14 digits." />
-      ) : null}
+      {barcodeError ? <BarcodeFailureCard message={barcodeError} /> : null}
 
       {localMatches.length > 0 ? (
         <section className="space-y-3">
@@ -101,6 +115,10 @@ export default async function ScanPage({
       </Link>
     </TrackingPageShell>
   );
+}
+
+function firstSearchParam(value: SearchParamValue) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function buildBackHref(meal?: string, date?: string) {
