@@ -10,7 +10,7 @@ This is not a public SaaS, not a commercial food database, not a subscription pr
 
 ## Current Phase
 
-Phase 1 MVP foundation is complete and released as `v0.1.0`. Active product work is moving into Phase 2A, which focuses on faster day-to-day food logging, better search, serving conversions, aliases, and copy helpers. Larger data integrations remain deferred until the core mobile logging flow feels quick enough for daily use.
+The `v0.1.1` source snapshot includes the Phase 1 foundation and the implemented Phase 2A improvements: faster day-to-day food logging, food search, serving conversions, aliases, favourites and meal-copy helpers. Larger data integrations remain deferred. See [CHANGELOG.md](CHANGELOG.md) for the complete release and migration notes.
 
 - Next.js 16 App Router, TypeScript, Tailwind
 - PostgreSQL with Drizzle ORM
@@ -26,6 +26,10 @@ Phase 1 MVP foundation is complete and released as `v0.1.0`. Active product work
 - Mobile-first dashboard and basic trend charts
 - PWA manifest and noindex robots policy
 - Core unit/nutrition/BMI tests
+
+### Upgrading an existing household instance
+
+Back up the intended database, install the release's locked dependencies with `pnpm install --frozen-lockfile`, set `DATABASE_URL` explicitly, and run `pnpm db:migrate` before building and starting the application. The added migrations preserve existing nutrition snapshots, map legacy `snack` entries to `afternoon_snack`, and require PostgreSQL's `pg_trgm` extension for food search. Do not use `db:reset` or rerun the account seed as an upgrade step; the seed changes configured users' passwords.
 
 Not implemented yet: CNF full import, Open Food Facts, barcode scanning, OCR, export files, native apps, or admin cleanup workflows.
 
