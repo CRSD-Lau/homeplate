@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Update Next.js and its ESLint configuration to 16.4.3, Zod to the patched 4.6 line, and Vitest to the patched 4.1 line.
+- Refresh vulnerable image processing, source-map, brace-expansion, Vite and esbuild dependencies in the reproducible pnpm lockfile.
+- Preserve the existing application behavior and database schema; this dependency update requires no new migration or account seeding.
+
 ## v0.1.1 - 2026-09-06
 
 Release snapshot of the household tracker improvements since v0.1.0. This release includes the previously unreleased Phase 2A features and database migrations as well as maintenance fixes.
