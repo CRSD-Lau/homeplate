@@ -1,0 +1,9 @@
+{
+  "name": "minimatch",
+  "version": "11.0.1",
+  "private": true,
+  "main": "index.cjs",
+  "dependencies": {
+    "minimatch-v11": "npm:minimatch@11.0.1"
+  }
+}

@@ -39,16 +39,11 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
     "eslint-config-prettier": "^10.1.8",
+    "minimatch-v11": "npm:minimatch@11.0.1",
     "prettier": "^3.9.10",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.12"
-  },
-  "pnpm": {
-    "overrides": {
-      "minimatch": "11.0.1",
-      "esbuild": "0.25.12"
-    }
   }
 }
