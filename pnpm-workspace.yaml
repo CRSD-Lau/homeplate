@@ -12,5 +12,6 @@ overrides:
   'nanoid@>=3.0.0 <3.3.18': 3.3.18
   'vite@>=8.0.0 <8.1.6': 8.1.6
   'source-map-js@<1.2.2': 1.2.2
+  'minimatch@<11.0.1': file:vendor/minimatch-cjs-compat
   'esbuild@<0.25.0': 0.25.12
   'esbuild@>=0.27.3 <0.28.1': 0.28.2
